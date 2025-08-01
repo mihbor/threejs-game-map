@@ -16,7 +16,7 @@ export default function Octahedron() {
   const lineRef = useRef<THREE.Line | null>(null);
 
   // Detail level for subdivision: 0 = no subdivision, 1 = 4 triangles per face, etc.
-  const detail = 3;
+  const detail = 5;
 
   // Subdivide a triangle into 4 smaller triangles
   const subdivideTriangle = (
@@ -258,7 +258,7 @@ export default function Octahedron() {
 
       // Only handle navigation if a triangle is selected and not in selection mode
       if (selectionMode) return;
-      
+
       const selectedTriangles = Array.from(clickedTriangles);
       if (selectedTriangles.length !== 1) return;
 
@@ -353,26 +353,26 @@ export default function Octahedron() {
   // Pathfinding using BFS to find shortest path between triangles
   const findPath = (start: number, end: number): number[] => {
     if (start === end) return [start];
-    
+
     const queue: { triangle: number; path: number[] }[] = [{ triangle: start, path: [start] }];
     const visited = new Set<number>([start]);
-    
+
     while (queue.length > 0) {
       const { triangle, path } = queue.shift()!;
       const neighbors = triangleAdjacency.get(triangle) || [];
-      
+
       for (const neighbor of neighbors) {
         if (neighbor === end) {
           return [...path, neighbor];
         }
-        
+
         if (!visited.has(neighbor)) {
           visited.add(neighbor);
           queue.push({ triangle: neighbor, path: [...path, neighbor] });
         }
       }
     }
-    
+
     return []; // No path found
   };
 
@@ -382,19 +382,19 @@ export default function Octahedron() {
       console.log("No path calculation - selectionMode:", selectionMode, "hoveredTriangle:", hoveredTriangle);
       return [];
     }
-    
+
     const selectedTriangles = Array.from(clickedTriangles);
     if (selectedTriangles.length !== 1) {
       console.log("No path calculation - wrong selection count:", selectedTriangles.length);
       return [];
     }
-    
+
     const startTriangle = selectedTriangles[0];
     if (startTriangle === hoveredTriangle) {
       console.log("No path calculation - same triangle");
       return [];
     }
-    
+
     const path = findPath(startTriangle, hoveredTriangle);
     console.log(`Path calculated from ${startTriangle} to ${hoveredTriangle}:`, path);
     return path;
@@ -417,19 +417,26 @@ export default function Octahedron() {
       onPointerOut={() => setHovered(false)}
     >
       {/* Render path line when in selection mode */}
-      {currentPath.length > 1 && (() => {
-        const pathPoints = currentPath.map(triangleIndex => {
-          const center = triangleCenters.get(triangleIndex);
-          return center ? new THREE.Vector3(center.x, center.y, center.z) : new THREE.Vector3(0, 0, 0);
-        });
-        
-        const geometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
-        
-        return (
-          <line geometry={geometry}>
-            <lineBasicMaterial color="#ff4444" linewidth={5} />
-          </line>
-        );
+      {selectionMode && hoveredTriangle !== null && clickedTriangles.size === 1 && (() => {
+        const selectedTriangle = Array.from(clickedTriangles)[0];
+        const path = findPath(selectedTriangle, hoveredTriangle);
+
+        if (path.length > 1) {
+          console.log("Rendering path:", path);
+          const pathPoints = path.map(triangleIndex => {
+            const center = triangleCenters.get(triangleIndex);
+            return center ? center.clone().normalize().multiplyScalar(2.05) : new THREE.Vector3(0, 0, 0);
+          });
+
+          const geometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+
+          return (
+            <line ref={lineRef} geometry={geometry}>
+              <lineBasicMaterial color="#ff4444" linewidth={3} />
+            </line>
+          );
+        }
+        return null;
       })()}
 
       {triangles.map(({ geometry, index }) => (
