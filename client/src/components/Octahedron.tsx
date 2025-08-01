@@ -179,7 +179,16 @@ export default function Octahedron() {
         </mesh>
       ))}
 
-{/* Wireframe overlay removed to prevent click interference */}
+      {/* Wireframe overlay - non-interactive to avoid click interference */}
+      <mesh raycast={false}>
+        <octahedronGeometry args={[2.01, detail]} />
+        <meshBasicMaterial
+          color="#ffffff"
+          wireframe={true}
+          transparent={true}
+          opacity={0.1}
+        />
+      </mesh>
     </group>
   );
 }
