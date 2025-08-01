@@ -38,8 +38,8 @@ export default function Octahedron() {
       <meshStandardMaterial
         color={clicked ? "#ff6b6b" : hovered ? "#4ecdc4" : "#45b7d1"}
         wireframe={false}
-        metalness={0.1}
-        roughness={0.5}
+        metalness={0.3}
+        roughness={0.4}
         emissive={hovered ? "#001122" : "#000000"}
         emissiveIntensity={hovered ? 0.1 : 0}
       />
