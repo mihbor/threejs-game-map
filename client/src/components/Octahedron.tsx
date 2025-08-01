@@ -26,9 +26,46 @@ export default function Octahedron() {
     }
   });*/
 
-  // Simplified group click handler
+  // Manual raycasting to find the closest triangle
   const handleClick = (event: THREE.Event) => {
-    console.log("Group click detected");
+    console.log('Group click detected');
+    
+    if (!groupRef.current) return;
+
+    // Update raycaster from mouse position
+    raycaster.setFromCamera(pointer, camera);
+    
+    // Get all triangle meshes (exclude wireframe)
+    const triangleMeshes = groupRef.current.children.filter(child => 
+      child.userData && child.userData.triangleIndex !== undefined
+    );
+    
+    // Find all intersections with triangle meshes
+    const intersects = raycaster.intersectObjects(triangleMeshes, false);
+    console.log('All intersections:', intersects.map(i => ({
+      distance: i.distance,
+      triangleIndex: i.object.userData.triangleIndex
+    })));
+    
+    if (intersects.length > 0) {
+      // Sort by distance to get the closest
+      intersects.sort((a, b) => a.distance - b.distance);
+      const closestIntersection = intersects[0];
+      const triangleIndex = closestIntersection.object.userData.triangleIndex;
+      
+      console.log(`Closest triangle: ${triangleIndex} at distance ${closestIntersection.distance}`);
+      
+      setClickedTriangles(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(triangleIndex)) {
+          newSet.delete(triangleIndex);
+        } else {
+          newSet.add(triangleIndex);
+        }
+        console.log('Updated clicked triangles:', Array.from(newSet));
+        return newSet;
+      });
+    }
   };
 
   // Subdivide a triangle into 4 smaller triangles
@@ -138,6 +175,7 @@ export default function Octahedron() {
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >
+      {/* Individual mesh clicks disabled in favor of group raycasting */}
       {triangles.map(({ geometry, index }) => (
         <mesh
           key={index}
@@ -146,20 +184,6 @@ export default function Octahedron() {
           userData={{ triangleIndex: index }}
           castShadow
           receiveShadow
-          onClick={(e) => {
-            e.stopPropagation();
-            console.log(`Direct mesh click on triangle ${index}`);
-            setClickedTriangles((prev) => {
-              const newSet = new Set(prev);
-              if (newSet.has(index)) {
-                newSet.delete(index);
-              } else {
-                newSet.add(index);
-              }
-              console.log("Updated clicked triangles:", Array.from(newSet));
-              return newSet;
-            });
-          }}
         >
           <meshStandardMaterial
             color={
