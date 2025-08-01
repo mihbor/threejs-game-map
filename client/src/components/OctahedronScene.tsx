@@ -10,8 +10,13 @@ export default function OctahedronScene() {
 
   // Create fake camera for orbit controls
   useEffect(() => {
-    const fakeCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    fakeCamera.position.set(5, 5, 5);
+    const fakeCamera = new THREE.PerspectiveCamera(
+      45,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000,
+    );
+    fakeCamera.position.set(0, 0, 5);
     fakeCameraRef.current = fakeCamera;
   }, []);
 
@@ -21,14 +26,15 @@ export default function OctahedronScene() {
       // Get the fake camera's direction
       const direction = new THREE.Vector3();
       fakeCameraRef.current.getWorldDirection(direction);
-      
-      // Apply 20-degree upward rotation
-      const upRotation = THREE.MathUtils.degToRad(20);
-      direction.applyAxisAngle(new THREE.Vector3(1, 0, 0), upRotation);
-      
+
+      // Apply upward rotation
+      // const upRotation = THREE.MathUtils.degToRad(0);
+      // direction.applyAxisAngle(new THREE.Vector3(1, 0, 0), upRotation);
+      direction.y += 0.3;
+
       // Position real camera at fake camera's position
       camera.position.copy(fakeCameraRef.current.position);
-      
+
       // Look in the adjusted direction
       const target = camera.position.clone().add(direction);
       camera.lookAt(target);
@@ -46,7 +52,7 @@ export default function OctahedronScene() {
         (camera as any).aspect = width / height;
         camera.updateProjectionMatrix();
       }
-      
+
       if (fakeCameraRef.current) {
         fakeCameraRef.current.aspect = width / height;
         fakeCameraRef.current.updateProjectionMatrix();
@@ -71,7 +77,7 @@ export default function OctahedronScene() {
       {/* Lighting */}
       <ambientLight intensity={0.4} />
       <directionalLight
-        position={[10, 10, 5]}
+        position={[10, 5, 5]}
         intensity={1}
         castShadow
         shadow-mapSize-width={2048}
@@ -82,9 +88,6 @@ export default function OctahedronScene() {
         shadow-camera-top={10}
         shadow-camera-bottom={-10}
       />
-
-      {/* Additional directional light for better illumination */}
-      <directionalLight position={[-5, 5, -5]} intensity={0.5} />
 
       {/* Octahedron */}
       <Octahedron />
@@ -105,7 +108,7 @@ export default function OctahedronScene() {
       )}
 
       {/* Optional: Add a grid helper for reference */}
-      <gridHelper args={[10, 10, "#444444", "#222222"]} position={[0, -2, 0]} />
+      {/* <gridHelper args={[10, 10, "#444444", "#222222"]} position={[0, -2, 0]} /> */}
     </>
   );
 }
