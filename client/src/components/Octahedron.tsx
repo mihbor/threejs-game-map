@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Mesh } from "three";
@@ -14,22 +14,6 @@ export default function Octahedron() {
 
   // Detail level for subdivision: 0 = no subdivision, 1 = 4 triangles per face, etc.
   const detail = 4;
-
-  // Animate the octahedron with slow rotation
-  /*useFrame((state, delta) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.x += delta * 0.2;
-      groupRef.current.rotation.y += delta * 0.3;
-      
-      // Add slight floating motion
-      groupRef.current.position.y = Math.sin(state.clock.elapsedTime) * 0.1;
-    }
-  });*/
-
-  // Simplified approach: use individual mesh click handlers
-  const handleClick = (event: THREE.Event) => {
-    // Group handler disabled - let individual meshes handle clicks
-  };
 
   // Subdivide a triangle into 4 smaller triangles
   const subdivideTriangle = (
@@ -59,61 +43,60 @@ export default function Octahedron() {
       .normalize()
       .multiplyScalar(2);
 
-    // Recursively subdivide the 4 new triangles
-    const triangles: THREE.Vector3[][] = [];
-    triangles.push(...subdivideTriangle(v1, m1, m3, level - 1));
-    triangles.push(...subdivideTriangle(m1, v2, m2, level - 1));
-    triangles.push(...subdivideTriangle(m3, m2, v3, level - 1));
-    triangles.push(...subdivideTriangle(m1, m2, m3, level - 1));
-
-    return triangles;
+    // Recursively subdivide the 4 sub-triangles
+    return [
+      ...subdivideTriangle(v1, m1, m3, level - 1),
+      ...subdivideTriangle(m1, v2, m2, level - 1),
+      ...subdivideTriangle(m3, m2, v3, level - 1),
+      ...subdivideTriangle(m1, m2, m3, level - 1),
+    ];
   };
 
-  // Create octahedron vertices and faces manually
+  // Create individual triangle geometries for each face
   const createOctahedronTriangles = () => {
-    // Octahedron vertices
-    const vertices = [
-      new THREE.Vector3(0, 2, 0), // top
-      new THREE.Vector3(2, 0, 0), // right
-      new THREE.Vector3(0, 0, 2), // front
-      new THREE.Vector3(-2, 0, 0), // left
-      new THREE.Vector3(0, 0, -2), // back
-      new THREE.Vector3(0, -2, 0), // bottom
-    ];
+    const baseOctahedron = new THREE.OctahedronGeometry(2, 0);
+    const positions = baseOctahedron.attributes.position.array as Float32Array;
+    const indices = baseOctahedron.index?.array as Uint16Array;
 
-    // Define the 8 triangular faces of the octahedron
-    const baseFaces = [
-      [0, 1, 2], // top-right-front
-      [0, 2, 3], // top-front-left
-      [0, 3, 4], // top-left-back
-      [0, 4, 1], // top-back-right
-      [5, 2, 1], // bottom-front-right
-      [5, 3, 2], // bottom-left-front
-      [5, 4, 3], // bottom-back-left
-      [5, 1, 4], // bottom-right-back
-    ];
+    if (!indices) return [];
 
-    const allTriangles: { geometry: THREE.BufferGeometry; index: number }[] =
-      [];
+    const allTriangles: { geometry: THREE.BufferGeometry; index: number }[] = [];
     let triangleIndex = 0;
 
-    baseFaces.forEach((face) => {
-      const v1 = vertices[face[0]];
-      const v2 = vertices[face[1]];
-      const v3 = vertices[face[2]];
+    // Process each face of the base octahedron
+    for (let i = 0; i < indices.length; i += 3) {
+      const v1 = new THREE.Vector3(
+        positions[indices[i] * 3],
+        positions[indices[i] * 3 + 1],
+        positions[indices[i] * 3 + 2],
+      );
+      const v2 = new THREE.Vector3(
+        positions[indices[i + 1] * 3],
+        positions[indices[i + 1] * 3 + 1],
+        positions[indices[i + 1] * 3 + 2],
+      );
+      const v3 = new THREE.Vector3(
+        positions[indices[i + 2] * 3],
+        positions[indices[i + 2] * 3 + 1],
+        positions[indices[i + 2] * 3 + 2],
+      );
 
-      // Subdivide this face based on detail level
+      // Subdivide this triangle
       const subdivided = subdivideTriangle(v1, v2, v3, detail);
 
       subdivided.forEach((triangle) => {
         const geometry = new THREE.BufferGeometry();
-        const positions: number[] = [];
-
-        // Add vertices for this triangle
-        triangle.forEach((vertex) => {
-          positions.push(vertex.x, vertex.y, vertex.z);
-        });
-
+        const positions = [
+          triangle[0].x,
+          triangle[0].y,
+          triangle[0].z,
+          triangle[1].x,
+          triangle[1].y,
+          triangle[1].z,
+          triangle[2].x,
+          triangle[2].y,
+          triangle[2].z,
+        ];
         geometry.setAttribute(
           "position",
           new THREE.BufferAttribute(new Float32Array(positions), 3),
@@ -123,12 +106,116 @@ export default function Octahedron() {
         allTriangles.push({ geometry, index: triangleIndex });
         triangleIndex++;
       });
-    });
+    }
 
     return allTriangles;
   };
 
-  const triangles = createOctahedronTriangles();
+  // Calculate triangle adjacency for keyboard navigation
+  const triangleAdjacency = useMemo(() => {
+    const adjacency = new Map<number, number[]>();
+    const triangles = createOctahedronTriangles();
+    
+    // For each triangle, find adjacent triangles by checking shared vertices
+    for (let i = 0; i < triangles.length; i++) {
+      const neighbors: number[] = [];
+      const currentGeometry = triangles[i].geometry;
+      const currentPositions = currentGeometry.attributes.position.array as Float32Array;
+      
+      for (let j = 0; j < triangles.length; j++) {
+        if (i === j) continue;
+        
+        const otherGeometry = triangles[j].geometry;
+        const otherPositions = otherGeometry.attributes.position.array as Float32Array;
+        
+        // Check if triangles share at least 2 vertices (making them adjacent)
+        let sharedVertices = 0;
+        for (let v1 = 0; v1 < currentPositions.length; v1 += 3) {
+          for (let v2 = 0; v2 < otherPositions.length; v2 += 3) {
+            const dx = Math.abs(currentPositions[v1] - otherPositions[v2]);
+            const dy = Math.abs(currentPositions[v1 + 1] - otherPositions[v2 + 1]);
+            const dz = Math.abs(currentPositions[v1 + 2] - otherPositions[v2 + 2]);
+            
+            // If vertices are very close (same vertex), count as shared
+            if (dx < 0.001 && dy < 0.001 && dz < 0.001) {
+              sharedVertices++;
+              break;
+            }
+          }
+        }
+        
+        // Triangles are adjacent if they share at least 2 vertices (an edge)
+        if (sharedVertices >= 2) {
+          neighbors.push(j);
+        }
+      }
+      
+      adjacency.set(i, neighbors);
+    }
+    
+    return adjacency;
+  }, [detail]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only handle navigation if a triangle is selected
+      const selectedTriangles = Array.from(clickedTriangles);
+      if (selectedTriangles.length !== 1) return;
+      
+      const currentTriangle = selectedTriangles[0];
+      const neighbors = triangleAdjacency.get(currentTriangle) || [];
+      
+      if (neighbors.length === 0) return;
+      
+      let nextTriangle: number | null = null;
+      
+      switch (event.key) {
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          // Move to first neighbor (arbitrary direction)
+          nextTriangle = neighbors[0];
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          // Move to second neighbor if available, otherwise first
+          nextTriangle = neighbors[1] || neighbors[0];
+          break;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          // Move to previous neighbor (cycling)
+          nextTriangle = neighbors[neighbors.length - 1];
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          // Move to next neighbor (cycling)
+          nextTriangle = neighbors[Math.min(1, neighbors.length - 1)];
+          break;
+        default:
+          return;
+      }
+      
+      if (nextTriangle !== null) {
+        event.preventDefault();
+        console.log(`Keyboard navigation: moving from triangle ${currentTriangle} to ${nextTriangle}`);
+        setClickedTriangles(new Set([nextTriangle]));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [clickedTriangles, triangleAdjacency]);
+
+  // Simplified approach: use individual mesh click handlers
+  const handleClick = (event: THREE.Event) => {
+    // Group handler disabled - let individual meshes handle clicks
+  };
+
+  const triangles = useMemo(() => createOctahedronTriangles(), [detail]);
 
   return (
     <group
@@ -185,7 +272,6 @@ export default function Octahedron() {
           />
         </mesh>
       ))}
-
 
     </group>
   );
