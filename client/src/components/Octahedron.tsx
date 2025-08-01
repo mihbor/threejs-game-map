@@ -6,10 +6,12 @@ import { Mesh } from "three";
 export default function Octahedron() {
   const groupRef = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
-  const [clickedTriangles, setClickedTriangles] = useState<Set<number>>(new Set());
+  const [clickedTriangles, setClickedTriangles] = useState<Set<number>>(
+    new Set(),
+  );
   const { camera, raycaster, pointer } = useThree();
   const meshRefs = useRef<(Mesh | null)[]>([]);
-  
+
   // Detail level for subdivision: 0 = no subdivision, 1 = 4 triangles per face, etc.
   const detail = 1;
 
@@ -26,27 +28,44 @@ export default function Octahedron() {
 
   // Simplified group click handler
   const handleClick = (event: THREE.Event) => {
-    console.log('Group click detected');
+    console.log("Group click detected");
   };
 
   // Subdivide a triangle into 4 smaller triangles
-  const subdivideTriangle = (v1: THREE.Vector3, v2: THREE.Vector3, v3: THREE.Vector3, level: number): THREE.Vector3[][] => {
+  const subdivideTriangle = (
+    v1: THREE.Vector3,
+    v2: THREE.Vector3,
+    v3: THREE.Vector3,
+    level: number,
+  ): THREE.Vector3[][] => {
     if (level === 0) {
       return [[v1, v2, v3]];
     }
-    
+
     // Calculate midpoints and normalize to sphere surface
-    const m1 = new THREE.Vector3().addVectors(v1, v2).multiplyScalar(0.5).normalize().multiplyScalar(2);
-    const m2 = new THREE.Vector3().addVectors(v2, v3).multiplyScalar(0.5).normalize().multiplyScalar(2);
-    const m3 = new THREE.Vector3().addVectors(v3, v1).multiplyScalar(0.5).normalize().multiplyScalar(2);
-    
+    const m1 = new THREE.Vector3()
+      .addVectors(v1, v2)
+      .multiplyScalar(0.5)
+      .normalize()
+      .multiplyScalar(2);
+    const m2 = new THREE.Vector3()
+      .addVectors(v2, v3)
+      .multiplyScalar(0.5)
+      .normalize()
+      .multiplyScalar(2);
+    const m3 = new THREE.Vector3()
+      .addVectors(v3, v1)
+      .multiplyScalar(0.5)
+      .normalize()
+      .multiplyScalar(2);
+
     // Recursively subdivide the 4 new triangles
     const triangles: THREE.Vector3[][] = [];
     triangles.push(...subdivideTriangle(v1, m1, m3, level - 1));
     triangles.push(...subdivideTriangle(m1, v2, m2, level - 1));
     triangles.push(...subdivideTriangle(m3, m2, v3, level - 1));
     triangles.push(...subdivideTriangle(m1, m2, m3, level - 1));
-    
+
     return triangles;
   };
 
@@ -54,12 +73,12 @@ export default function Octahedron() {
   const createOctahedronTriangles = () => {
     // Octahedron vertices
     const vertices = [
-      new THREE.Vector3(0, 2, 0),    // top
-      new THREE.Vector3(2, 0, 0),    // right
-      new THREE.Vector3(0, 0, 2),    // front
-      new THREE.Vector3(-2, 0, 0),   // left
-      new THREE.Vector3(0, 0, -2),   // back
-      new THREE.Vector3(0, -2, 0),   // bottom
+      new THREE.Vector3(0, 2, 0), // top
+      new THREE.Vector3(2, 0, 0), // right
+      new THREE.Vector3(0, 0, 2), // front
+      new THREE.Vector3(-2, 0, 0), // left
+      new THREE.Vector3(0, 0, -2), // back
+      new THREE.Vector3(0, -2, 0), // bottom
     ];
 
     // Define the 8 triangular faces of the octahedron
@@ -74,29 +93,33 @@ export default function Octahedron() {
       [5, 1, 4], // bottom-right-back
     ];
 
-    const allTriangles: { geometry: THREE.BufferGeometry; index: number }[] = [];
+    const allTriangles: { geometry: THREE.BufferGeometry; index: number }[] =
+      [];
     let triangleIndex = 0;
 
     baseFaces.forEach((face) => {
       const v1 = vertices[face[0]];
       const v2 = vertices[face[1]];
       const v3 = vertices[face[2]];
-      
+
       // Subdivide this face based on detail level
       const subdivided = subdivideTriangle(v1, v2, v3, detail);
-      
-      subdivided.forEach(triangle => {
+
+      subdivided.forEach((triangle) => {
         const geometry = new THREE.BufferGeometry();
         const positions: number[] = [];
-        
+
         // Add vertices for this triangle
-        triangle.forEach(vertex => {
+        triangle.forEach((vertex) => {
           positions.push(vertex.x, vertex.y, vertex.z);
         });
-        
-        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+
+        geometry.setAttribute(
+          "position",
+          new THREE.BufferAttribute(new Float32Array(positions), 3),
+        );
         geometry.computeVertexNormals();
-        
+
         allTriangles.push({ geometry, index: triangleIndex });
         triangleIndex++;
       });
@@ -118,7 +141,7 @@ export default function Octahedron() {
       {triangles.map(({ geometry, index }) => (
         <mesh
           key={index}
-          ref={el => meshRefs.current[index] = el}
+          ref={(el) => (meshRefs.current[index] = el)}
           geometry={geometry}
           userData={{ triangleIndex: index }}
           castShadow
@@ -126,39 +149,37 @@ export default function Octahedron() {
           onClick={(e) => {
             e.stopPropagation();
             console.log(`Direct mesh click on triangle ${index}`);
-            setClickedTriangles(prev => {
+            setClickedTriangles((prev) => {
               const newSet = new Set(prev);
               if (newSet.has(index)) {
                 newSet.delete(index);
               } else {
                 newSet.add(index);
               }
-              console.log('Updated clicked triangles:', Array.from(newSet));
+              console.log("Updated clicked triangles:", Array.from(newSet));
               return newSet;
             });
           }}
         >
           <meshStandardMaterial
-            color={clickedTriangles.has(index) ? "#ff6b6b" : hovered ? "#4ecdc4" : "#45b7d1"}
+            color={
+              clickedTriangles.has(index)
+                ? "#ff6b6b"
+                : hovered
+                  ? "#4ecdc4"
+                  : "#45b7d1"
+            }
             wireframe={false}
             metalness={0.3}
             roughness={0.4}
             emissive={hovered ? "#001122" : "#000000"}
             emissiveIntensity={hovered ? 0.1 : 0}
+            side={THREE.FrontSide}
           />
         </mesh>
       ))}
 
-      {/* Optional wireframe overlay */}
-      <mesh>
-        <octahedronGeometry args={[2.01, 0]} />
-        <meshBasicMaterial
-          color="#ffffff"
-          wireframe={true}
-          transparent={true}
-          opacity={0.1}
-        />
-      </mesh>
+{/* Wireframe overlay removed to prevent click interference */}
     </group>
   );
 }
