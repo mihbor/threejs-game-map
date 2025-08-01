@@ -378,15 +378,26 @@ export default function Octahedron() {
 
   // Calculate path when in selection mode and hovering
   const currentPath = useMemo(() => {
-    if (!selectionMode || hoveredTriangle === null) return [];
+    if (!selectionMode || hoveredTriangle === null) {
+      console.log("No path calculation - selectionMode:", selectionMode, "hoveredTriangle:", hoveredTriangle);
+      return [];
+    }
     
     const selectedTriangles = Array.from(clickedTriangles);
-    if (selectedTriangles.length !== 1) return [];
+    if (selectedTriangles.length !== 1) {
+      console.log("No path calculation - wrong selection count:", selectedTriangles.length);
+      return [];
+    }
     
     const startTriangle = selectedTriangles[0];
-    if (startTriangle === hoveredTriangle) return [];
+    if (startTriangle === hoveredTriangle) {
+      console.log("No path calculation - same triangle");
+      return [];
+    }
     
-    return findPath(startTriangle, hoveredTriangle);
+    const path = findPath(startTriangle, hoveredTriangle);
+    console.log(`Path calculated from ${startTriangle} to ${hoveredTriangle}:`, path);
+    return path;
   }, [selectionMode, hoveredTriangle, clickedTriangles, triangleAdjacency]);
 
   // Apply cursor style to canvas when in selection mode
@@ -406,24 +417,20 @@ export default function Octahedron() {
       onPointerOut={() => setHovered(false)}
     >
       {/* Render path line when in selection mode */}
-      {currentPath.length > 1 && (
-        <line ref={lineRef}>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              count={currentPath.length}
-              array={new Float32Array(
-                currentPath.flatMap(triangleIndex => {
-                  const center = triangleCenters.get(triangleIndex);
-                  return center ? [center.x, center.y, center.z] : [0, 0, 0];
-                })
-              )}
-              itemSize={3}
-            />
-          </bufferGeometry>
-          <lineBasicMaterial color="#ff4444" linewidth={3} />
-        </line>
-      )}
+      {currentPath.length > 1 && (() => {
+        const pathPoints = currentPath.map(triangleIndex => {
+          const center = triangleCenters.get(triangleIndex);
+          return center ? new THREE.Vector3(center.x, center.y, center.z) : new THREE.Vector3(0, 0, 0);
+        });
+        
+        const geometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+        
+        return (
+          <line geometry={geometry}>
+            <lineBasicMaterial color="#ff4444" linewidth={5} />
+          </line>
+        );
+      })()}
 
       {triangles.map(({ geometry, index }) => (
         <mesh
