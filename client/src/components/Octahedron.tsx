@@ -9,7 +9,7 @@ export default function Octahedron() {
   const [clicked, setClicked] = useState(false);
 
   // Animate the octahedron with slow rotation
-  useFrame((state, delta) => {
+  /*useFrame((state, delta) => {
     if (meshRef.current) {
       meshRef.current.rotation.x += delta * 0.2;
       meshRef.current.rotation.y += delta * 0.3;
@@ -17,7 +17,7 @@ export default function Octahedron() {
       // Add slight floating motion
       meshRef.current.position.y = Math.sin(state.clock.elapsedTime) * 0.1;
     }
-  });
+  });*/
 
   const detail = 5;
 
