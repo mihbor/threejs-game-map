@@ -67,6 +67,7 @@ export default function OctahedronScene() {
         maxDistance={20}
         autoRotate={false}
         autoRotateSpeed={0.5}
+        target={[0, 1.5, 0]}
       />
 
       {/* Optional: Add a grid helper for reference */}
