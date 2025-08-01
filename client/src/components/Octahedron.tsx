@@ -54,35 +54,57 @@ export default function Octahedron() {
 
   // Create individual triangle geometries for each face
   const createOctahedronTriangles = () => {
+    console.log("Creating octahedron triangles...");
+    
     const baseOctahedron = new THREE.OctahedronGeometry(2, 0);
     const positions = baseOctahedron.attributes.position.array as Float32Array;
     const indices = baseOctahedron.index?.array as Uint16Array;
 
-    if (!indices) return [];
+    console.log("Base octahedron created:", {
+      positionsLength: positions.length,
+      indicesLength: indices?.length,
+      hasIndices: !!indices
+    });
 
     const allTriangles: { geometry: THREE.BufferGeometry; index: number }[] = [];
     let triangleIndex = 0;
 
+    // Handle both indexed and non-indexed geometries
+    let faceCount: number;
+    if (indices) {
+      console.log(`Processing ${indices.length / 3} faces with detail level ${detail} (indexed)`);
+      faceCount = indices.length / 3;
+    } else {
+      console.log(`Processing ${positions.length / 9} faces with detail level ${detail} (non-indexed)`);
+      faceCount = positions.length / 9;
+    }
+
     // Process each face of the base octahedron
-    for (let i = 0; i < indices.length; i += 3) {
-      const v1 = new THREE.Vector3(
-        positions[indices[i] * 3],
-        positions[indices[i] * 3 + 1],
-        positions[indices[i] * 3 + 2],
-      );
-      const v2 = new THREE.Vector3(
-        positions[indices[i + 1] * 3],
-        positions[indices[i + 1] * 3 + 1],
-        positions[indices[i + 1] * 3 + 2],
-      );
-      const v3 = new THREE.Vector3(
-        positions[indices[i + 2] * 3],
-        positions[indices[i + 2] * 3 + 1],
-        positions[indices[i + 2] * 3 + 2],
-      );
+    for (let i = 0; i < faceCount; i++) {
+      let v1: THREE.Vector3, v2: THREE.Vector3, v3: THREE.Vector3;
+      
+      if (indices) {
+        // Use indices to get vertices
+        const i1 = indices[i * 3];
+        const i2 = indices[i * 3 + 1];
+        const i3 = indices[i * 3 + 2];
+        
+        v1 = new THREE.Vector3(positions[i1 * 3], positions[i1 * 3 + 1], positions[i1 * 3 + 2]);
+        v2 = new THREE.Vector3(positions[i2 * 3], positions[i2 * 3 + 1], positions[i2 * 3 + 2]);
+        v3 = new THREE.Vector3(positions[i3 * 3], positions[i3 * 3 + 1], positions[i3 * 3 + 2]);
+      } else {
+        // Use direct position data
+        const startIndex = i * 9;
+        v1 = new THREE.Vector3(positions[startIndex], positions[startIndex + 1], positions[startIndex + 2]);
+        v2 = new THREE.Vector3(positions[startIndex + 3], positions[startIndex + 4], positions[startIndex + 5]);
+        v3 = new THREE.Vector3(positions[startIndex + 6], positions[startIndex + 7], positions[startIndex + 8]);
+      }
+
+      console.log(`Face ${i/3}: vertices`, v1, v2, v3);
 
       // Subdivide this triangle
       const subdivided = subdivideTriangle(v1, v2, v3, detail);
+      console.log(`Face ${i/3} subdivided into ${subdivided.length} triangles`);
 
       subdivided.forEach((triangle) => {
         const geometry = new THREE.BufferGeometry();
@@ -108,6 +130,7 @@ export default function Octahedron() {
       });
     }
 
+    console.log(`Created ${allTriangles.length} total triangles`);
     return allTriangles;
   };
 
