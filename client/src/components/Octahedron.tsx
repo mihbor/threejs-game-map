@@ -141,18 +141,56 @@ export default function Octahedron() {
     
     console.log(`Created ${triangles.length} triangles for adjacency calculation`);
     
-    // For now, create a simple adjacency where each triangle connects to a few nearby ones
-    // This is a simplified approach to avoid performance issues
-    triangles.forEach((_, index) => {
+    // Helper function to check if two triangles share an edge (2 vertices)
+    const shareEdge = (tri1: THREE.BufferGeometry, tri2: THREE.BufferGeometry): boolean => {
+      const pos1 = tri1.attributes.position.array as Float32Array;
+      const pos2 = tri2.attributes.position.array as Float32Array;
+      
+      const vertices1 = [];
+      const vertices2 = [];
+      
+      // Extract vertices from both triangles
+      for (let i = 0; i < 9; i += 3) {
+        vertices1.push([pos1[i], pos1[i + 1], pos1[i + 2]]);
+        vertices2.push([pos2[i], pos2[i + 1], pos2[i + 2]]);
+      }
+      
+      // Count shared vertices (vertices that are very close to each other)
+      let sharedVertices = 0;
+      const tolerance = 0.001;
+      
+      for (const v1 of vertices1) {
+        for (const v2 of vertices2) {
+          const dx = Math.abs(v1[0] - v2[0]);
+          const dy = Math.abs(v1[1] - v2[1]);
+          const dz = Math.abs(v1[2] - v2[2]);
+          
+          if (dx < tolerance && dy < tolerance && dz < tolerance) {
+            sharedVertices++;
+            break; // Found a match, move to next vertex in vertices1
+          }
+        }
+      }
+      
+      // Triangles share an edge if they have exactly 2 vertices in common
+      return sharedVertices === 2;
+    };
+    
+    // Calculate adjacency for each triangle
+    triangles.forEach((triangle, index) => {
       const neighbors: number[] = [];
       
-      // Add a few neighboring triangles based on simple index relationships
-      if (index > 0) neighbors.push(index - 1);
-      if (index < triangles.length - 1) neighbors.push(index + 1);
-      if (index > 3) neighbors.push(index - 4);
-      if (index < triangles.length - 4) neighbors.push(index + 4);
+      // Check against all other triangles
+      triangles.forEach((otherTriangle, otherIndex) => {
+        if (index !== otherIndex && shareEdge(triangle.geometry, otherTriangle.geometry)) {
+          neighbors.push(otherIndex);
+        }
+      });
       
       adjacency.set(index, neighbors);
+      if (neighbors.length > 0) {
+        console.log(`Triangle ${index} has ${neighbors.length} edge-sharing neighbors: [${neighbors.slice(0, 5).join(', ')}${neighbors.length > 5 ? '...' : ''}]`);
+      }
     });
     
     console.log(`Adjacency map created with ${adjacency.size} entries`);
@@ -173,30 +211,40 @@ export default function Octahedron() {
       
       let nextTriangle: number | null = null;
       
+      // Since each triangle has exactly 3 neighbors, map keys to cycle through them
       switch (event.key) {
         case 'ArrowUp':
         case 'w':
         case 'W':
-          // Move to first neighbor (arbitrary direction)
+          // Move to first neighbor
           nextTriangle = neighbors[0];
           break;
         case 'ArrowDown':
         case 's':
         case 'S':
-          // Move to second neighbor if available, otherwise first
-          nextTriangle = neighbors[1] || neighbors[0];
+          // Move to second neighbor (if available)
+          nextTriangle = neighbors[1] !== undefined ? neighbors[1] : neighbors[0];
           break;
         case 'ArrowLeft':
         case 'a':
         case 'A':
-          // Move to previous neighbor (cycling)
-          nextTriangle = neighbors[neighbors.length - 1];
+          // Move to third neighbor (cycling back)
+          nextTriangle = neighbors[2] !== undefined ? neighbors[2] : neighbors[neighbors.length - 1];
           break;
         case 'ArrowRight':
         case 'd':
         case 'D':
-          // Move to next neighbor (cycling)
-          nextTriangle = neighbors[Math.min(1, neighbors.length - 1)];
+          // Cycle forward through neighbors (1 -> 2 -> 0 -> 1...)
+          const currentIndex = neighbors.indexOf(currentTriangle);
+          let nextIndex = 0; // Default to first neighbor
+          if (currentIndex === -1) {
+            // If current triangle isn't in neighbors (shouldn't happen), use first neighbor
+            nextIndex = 0;
+          } else {
+            // Find which neighbor we came from and move to the next one
+            nextIndex = (neighbors.indexOf(neighbors.find(n => n > currentTriangle) || neighbors[0])) % neighbors.length;
+          }
+          nextTriangle = neighbors[nextIndex];
           break;
         default:
           return;
