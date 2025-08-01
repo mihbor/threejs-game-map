@@ -2,6 +2,9 @@ import { useRef, useState, useEffect, useMemo } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { Mesh } from "three";
+import { Line2 } from "three/examples/jsm/lines/Line2.js";
+import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 
 export default function Octahedron() {
   const groupRef = useRef<THREE.Group>(null);
@@ -13,10 +16,10 @@ export default function Octahedron() {
   const [hoveredTriangle, setHoveredTriangle] = useState<number | null>(null);
   const { camera, raycaster, pointer } = useThree();
   const meshRefs = useRef<(Mesh | null)[]>([]);
-  const lineRef = useRef<THREE.Line | null>(null);
+  const lineRef = useRef<Line2 | null>(null);
 
-  // Detail level for subdivision: 0 = no subdivision, 1 = 4 triangles per face, etc.
-  const detail = 5;
+  // Detail level for subdivision of octahedron faces: 0 = no subdivision, 1 = 4 triangles per face, etc.
+  const detail = 3;
 
   // Subdivide a triangle into 4 smaller triangles
   const subdivideTriangle = (
@@ -408,6 +411,23 @@ export default function Octahedron() {
     }
   }, [selectionMode]);
 
+  // Update line material resolution when window is resized
+  useEffect(() => {
+    const handleResize = () => {
+      if (lineRef.current && lineRef.current.material) {
+        (lineRef.current.material as LineMaterial).resolution.set(
+          window.innerWidth, 
+          window.innerHeight
+        );
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
   return (
     <group
       ref={groupRef}
@@ -428,12 +448,27 @@ export default function Octahedron() {
             return center ? center.clone().normalize().multiplyScalar(2.05) : new THREE.Vector3(0, 0, 0);
           });
 
-          const geometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+          // Create positions array for LineGeometry
+          const positions: number[] = [];
+          pathPoints.forEach(point => {
+            positions.push(point.x, point.y, point.z);
+          });
+
+          // Create LineGeometry
+          const geometry = new LineGeometry();
+          geometry.setPositions(positions);
 
           return (
-            <line ref={lineRef} geometry={geometry}>
-              <lineBasicMaterial color="#ff4444" linewidth={3} />
-            </line>
+            <primitive 
+              object={new Line2(geometry, 
+                new LineMaterial({ 
+                  color: "#ff4444", 
+                  linewidth: 3,
+                  resolution: new THREE.Vector2(window.innerWidth, window.innerHeight) // needed for proper width
+                })
+              )} 
+              ref={lineRef} 
+            />
           );
         }
         return null;
@@ -487,15 +522,15 @@ export default function Octahedron() {
                 ? "#ff6b6b" // Selected triangle stays red
                 : selectionMode && hoveredTriangle === index
                   ? "#ffff00" // Yellow hover in selection mode
-                  : hovered
-                    ? "#4ecdc4"
+//                   : hovered
+//                     ? "#4ecdc4"
                     : "#45b7d1"
             }
             wireframe={false}
             metalness={0.3}
             roughness={0.4}
-            emissive={hovered ? "#001122" : "#000000"}
-            emissiveIntensity={hovered ? 0.1 : 0}
+//             emissive={hovered ? "#001122" : "#000000"}
+//             emissiveIntensity={hovered ? 0.1 : 0}
             side={THREE.DoubleSide}
           />
         </mesh>
