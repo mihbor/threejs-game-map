@@ -19,7 +19,7 @@ export default function Octahedron() {
   const lineRef = useRef<Line2 | null>(null);
 
   // Detail level for subdivision of octahedron faces: 0 = no subdivision, 1 = 4 triangles per face, etc.
-  const detail = 3;
+  const detail = 4;
 
   // Subdivide a triangle into 4 smaller triangles
   const subdivideTriangle = (
@@ -331,9 +331,13 @@ export default function Octahedron() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [clickedTriangles, triangleAdjacency, selectionMode]);
 
-  // Simplified approach: use individual mesh click handlers
+  // Handle clicks on the group (background)
   const handleClick = (event: THREE.Event) => {
-    // Group handler disabled - let individual meshes handle clicks
+    // Disable selection mode when clicking anywhere
+    if (selectionMode) {
+      console.log('Disabling selection mode due to click');
+      setSelectionMode(false);
+    }
   };
 
   const triangles = useMemo(() => createOctahedronTriangles(), [detail]);
@@ -490,6 +494,13 @@ export default function Octahedron() {
               "distance:",
               e.distance,
             );
+
+            // Disable selection mode when clicking on a triangle
+            if (selectionMode) {
+              console.log(`Disabling selection mode due to click on triangle ${index}`);
+              setSelectionMode(false);
+            }
+
             setClickedTriangles((prev) => {
               // Only one triangle can be selected at a time
               if (prev.has(index)) {
