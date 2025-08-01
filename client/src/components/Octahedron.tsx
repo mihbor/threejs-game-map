@@ -13,7 +13,7 @@ export default function Octahedron() {
   const meshRefs = useRef<(Mesh | null)[]>([]);
 
   // Detail level for subdivision: 0 = no subdivision, 1 = 4 triangles per face, etc.
-  const detail = 2;
+  const detail = 4;
 
   // Animate the octahedron with slow rotation
   /*useFrame((state, delta) => {
@@ -186,11 +186,7 @@ export default function Octahedron() {
         </mesh>
       ))}
 
-      {/* Wireframe overlay that matches the subdivided triangles */}
-      <lineSegments>
-        <edgesGeometry args={[new THREE.OctahedronGeometry(2, detail)]} />
-        <lineBasicMaterial color="#ffffff" transparent={true} opacity={0.2} />
-      </lineSegments>
+
     </group>
   );
 }
