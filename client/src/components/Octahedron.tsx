@@ -23,17 +23,24 @@ export default function Octahedron() {
 
   // Handle click events with raycasting to detect specific triangles
   const handleClick = (event: THREE.Event) => {
-    if (!groupRef.current) return;
+    console.log('Click detected!', event);
+    if (!groupRef.current) {
+      console.log('No group ref');
+      return;
+    }
 
     // Update raycaster from mouse position
     raycaster.setFromCamera(pointer, camera);
+    console.log('Raycaster position:', pointer, camera.position);
     
     // Find intersections with all meshes in the group
     const intersects = raycaster.intersectObjects(groupRef.current.children, true);
+    console.log('Intersections found:', intersects.length, intersects);
     
     if (intersects.length > 0) {
       const intersection = intersects[0];
       const mesh = intersection.object as THREE.Mesh;
+      console.log('Intersection object:', mesh, mesh.userData);
       
       // Get the triangle index from the mesh userData
       if (mesh.userData && mesh.userData.triangleIndex !== undefined) {
@@ -48,9 +55,14 @@ export default function Octahedron() {
           } else {
             newSet.add(triangleIndex); // Toggle on
           }
+          console.log('Updated clicked triangles:', Array.from(newSet));
           return newSet;
         });
+      } else {
+        console.log('No triangle index in userData');
       }
+    } else {
+      console.log('No intersections found');
     }
   };
 
@@ -113,6 +125,20 @@ export default function Octahedron() {
           userData={{ triangleIndex: index }}
           castShadow
           receiveShadow
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log(`Direct mesh click on triangle ${index}`);
+            setClickedTriangles(prev => {
+              const newSet = new Set(prev);
+              if (newSet.has(index)) {
+                newSet.delete(index);
+              } else {
+                newSet.add(index);
+              }
+              console.log('Updated clicked triangles:', Array.from(newSet));
+              return newSet;
+            });
+          }}
         >
           <meshStandardMaterial
             color={clickedTriangles.has(index) ? "#ff6b6b" : hovered ? "#4ecdc4" : "#45b7d1"}
