@@ -49,9 +49,6 @@ export default function OctahedronScene() {
         shadow-camera-bottom={-10}
       />
 
-      {/* Additional directional light for better illumination */}
-      <directionalLight position={[-5, 5, -5]} intensity={0.5} />
-
       {/* Octahedron */}
       <Octahedron />
 
@@ -66,9 +63,6 @@ export default function OctahedronScene() {
         autoRotateSpeed={0.5}
         target={[0, 0, 0]}
       />
-
-      {/* Optional: Add a grid helper for reference */}
-      <gridHelper args={[10, 10, "#444444", "#222222"]} position={[0, -2, 0]} />
     </>
   );
 }
