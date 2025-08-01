@@ -9,6 +9,9 @@ export default function Octahedron() {
   const [clickedTriangles, setClickedTriangles] = useState<Set<number>>(new Set());
   const { camera, raycaster, pointer } = useThree();
   const meshRefs = useRef<(Mesh | null)[]>([]);
+  
+  // Detail level for subdivision: 0 = no subdivision, 1 = 4 triangles per face, etc.
+  const detail = 1;
 
   // Animate the octahedron with slow rotation
   /*useFrame((state, delta) => {
@@ -21,49 +24,30 @@ export default function Octahedron() {
     }
   });*/
 
-  // Handle click events with raycasting to detect specific triangles
+  // Simplified group click handler
   const handleClick = (event: THREE.Event) => {
-    console.log('Click detected!', event);
-    if (!groupRef.current) {
-      console.log('No group ref');
-      return;
-    }
+    console.log('Group click detected');
+  };
 
-    // Update raycaster from mouse position
-    raycaster.setFromCamera(pointer, camera);
-    console.log('Raycaster position:', pointer, camera.position);
-    
-    // Find intersections with all meshes in the group
-    const intersects = raycaster.intersectObjects(groupRef.current.children, true);
-    console.log('Intersections found:', intersects.length, intersects);
-    
-    if (intersects.length > 0) {
-      const intersection = intersects[0];
-      const mesh = intersection.object as THREE.Mesh;
-      console.log('Intersection object:', mesh, mesh.userData);
-      
-      // Get the triangle index from the mesh userData
-      if (mesh.userData && mesh.userData.triangleIndex !== undefined) {
-        const triangleIndex = mesh.userData.triangleIndex;
-        
-        console.log(`Clicked triangle index: ${triangleIndex}`);
-        
-        setClickedTriangles(prev => {
-          const newSet = new Set(prev);
-          if (newSet.has(triangleIndex)) {
-            newSet.delete(triangleIndex); // Toggle off if already clicked
-          } else {
-            newSet.add(triangleIndex); // Toggle on
-          }
-          console.log('Updated clicked triangles:', Array.from(newSet));
-          return newSet;
-        });
-      } else {
-        console.log('No triangle index in userData');
-      }
-    } else {
-      console.log('No intersections found');
+  // Subdivide a triangle into 4 smaller triangles
+  const subdivideTriangle = (v1: THREE.Vector3, v2: THREE.Vector3, v3: THREE.Vector3, level: number): THREE.Vector3[][] => {
+    if (level === 0) {
+      return [[v1, v2, v3]];
     }
+    
+    // Calculate midpoints and normalize to sphere surface
+    const m1 = new THREE.Vector3().addVectors(v1, v2).multiplyScalar(0.5).normalize().multiplyScalar(2);
+    const m2 = new THREE.Vector3().addVectors(v2, v3).multiplyScalar(0.5).normalize().multiplyScalar(2);
+    const m3 = new THREE.Vector3().addVectors(v3, v1).multiplyScalar(0.5).normalize().multiplyScalar(2);
+    
+    // Recursively subdivide the 4 new triangles
+    const triangles: THREE.Vector3[][] = [];
+    triangles.push(...subdivideTriangle(v1, m1, m3, level - 1));
+    triangles.push(...subdivideTriangle(m1, v2, m2, level - 1));
+    triangles.push(...subdivideTriangle(m3, m2, v3, level - 1));
+    triangles.push(...subdivideTriangle(m1, m2, m3, level - 1));
+    
+    return triangles;
   };
 
   // Create octahedron vertices and faces manually
@@ -79,7 +63,7 @@ export default function Octahedron() {
     ];
 
     // Define the 8 triangular faces of the octahedron
-    const faces = [
+    const baseFaces = [
       [0, 1, 2], // top-right-front
       [0, 2, 3], // top-front-left
       [0, 3, 4], // top-left-back
@@ -90,21 +74,35 @@ export default function Octahedron() {
       [5, 1, 4], // bottom-right-back
     ];
 
-    return faces.map((face, index) => {
-      const geometry = new THREE.BufferGeometry();
-      const positions: number[] = [];
+    const allTriangles: { geometry: THREE.BufferGeometry; index: number }[] = [];
+    let triangleIndex = 0;
+
+    baseFaces.forEach((face) => {
+      const v1 = vertices[face[0]];
+      const v2 = vertices[face[1]];
+      const v3 = vertices[face[2]];
       
-      // Add vertices for this triangle
-      face.forEach(vertexIndex => {
-        const vertex = vertices[vertexIndex];
-        positions.push(vertex.x, vertex.y, vertex.z);
+      // Subdivide this face based on detail level
+      const subdivided = subdivideTriangle(v1, v2, v3, detail);
+      
+      subdivided.forEach(triangle => {
+        const geometry = new THREE.BufferGeometry();
+        const positions: number[] = [];
+        
+        // Add vertices for this triangle
+        triangle.forEach(vertex => {
+          positions.push(vertex.x, vertex.y, vertex.z);
+        });
+        
+        geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+        geometry.computeVertexNormals();
+        
+        allTriangles.push({ geometry, index: triangleIndex });
+        triangleIndex++;
       });
-      
-      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
-      geometry.computeVertexNormals();
-      
-      return { geometry, index };
     });
+
+    return allTriangles;
   };
 
   const triangles = createOctahedronTriangles();
