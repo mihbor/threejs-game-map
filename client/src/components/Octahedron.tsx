@@ -155,16 +155,14 @@ export default function Octahedron() {
               e.distance,
             );
             setClickedTriangles((prev) => {
-              // Only one triangle can be selected at a time
-              if (prev.has(index)) {
-                // If clicking the currently selected triangle, deselect it
-                console.log(`Deselecting triangle ${index}`);
-                return new Set();
+              const newSet = new Set(prev);
+              if (newSet.has(index)) {
+                newSet.delete(index);
               } else {
-                // Select the new triangle (replacing any previous selection)
-                console.log(`Selecting triangle ${index}`);
-                return new Set([index]);
+                newSet.add(index);
               }
+              console.log("Updated clicked triangles:", Array.from(newSet));
+              return newSet;
             });
           }}
         >
