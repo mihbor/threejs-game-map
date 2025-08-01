@@ -26,7 +26,7 @@ export default function Octahedron() {
     }
   });*/
 
-  // Manual raycasting to find the closest triangle
+  // Manual raycasting to find the closest front-facing triangle
   const handleClick = (event: THREE.Event) => {
     console.log('Group click detected');
     
@@ -42,18 +42,34 @@ export default function Octahedron() {
     
     // Find all intersections with triangle meshes
     const intersects = raycaster.intersectObjects(triangleMeshes, false);
-    console.log('All intersections:', intersects.map(i => ({
-      distance: i.distance,
-      triangleIndex: i.object.userData.triangleIndex
-    })));
     
-    if (intersects.length > 0) {
-      // Sort by distance to get the closest
-      intersects.sort((a, b) => a.distance - b.distance);
-      const closestIntersection = intersects[0];
+    // Filter to only front-facing triangles and log detailed info
+    const frontFacingIntersects = intersects.filter(intersection => {
+      if (intersection.face) {
+        // Check if the face normal is pointing toward the camera
+        const worldNormal = intersection.face.normal.clone();
+        const mesh = intersection.object as THREE.Mesh;
+        mesh.localToWorld(worldNormal);
+        const viewDirection = raycaster.ray.direction;
+        const dotProduct = worldNormal.dot(viewDirection);
+        
+        console.log(`Triangle ${intersection.object.userData.triangleIndex}: distance=${intersection.distance.toFixed(3)}, dot=${dotProduct.toFixed(3)}, front-facing=${dotProduct < 0}`);
+        
+        // Front-facing if dot product is negative (normal points toward camera)
+        return dotProduct < 0;
+      }
+      return false;
+    });
+    
+    console.log(`Found ${intersects.length} total intersections, ${frontFacingIntersects.length} front-facing`);
+    
+    if (frontFacingIntersects.length > 0) {
+      // Sort by distance to get the closest front-facing triangle
+      frontFacingIntersects.sort((a, b) => a.distance - b.distance);
+      const closestIntersection = frontFacingIntersects[0];
       const triangleIndex = closestIntersection.object.userData.triangleIndex;
       
-      console.log(`Closest triangle: ${triangleIndex} at distance ${closestIntersection.distance}`);
+      console.log(`Selected closest front-facing triangle: ${triangleIndex} at distance ${closestIntersection.distance.toFixed(3)}`);
       
       setClickedTriangles(prev => {
         const newSet = new Set(prev);
@@ -65,6 +81,8 @@ export default function Octahedron() {
         console.log('Updated clicked triangles:', Array.from(newSet));
         return newSet;
       });
+    } else {
+      console.log('No front-facing triangles found');
     }
   };
 
