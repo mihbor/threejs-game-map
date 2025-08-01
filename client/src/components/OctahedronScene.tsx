@@ -1,7 +1,7 @@
 import { OrbitControls } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect } from "react";
-import Octahedron from "./Octahedron";
+import Octahedron from "./Octahedron.tsx";
 
 export default function OctahedronScene() {
   const { gl, camera } = useThree();
