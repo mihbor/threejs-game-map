@@ -179,14 +179,15 @@ export default function Octahedron() {
         </mesh>
       ))}
 
-      {/* Wireframe overlay - non-interactive to avoid click interference */}
-      <mesh raycast={false}>
-        <octahedronGeometry args={[2.01, detail]} />
+      {/* Wireframe overlay - positioned behind triangles to avoid click interference */}
+      <mesh position={[0, 0, -0.001]} onPointerDown={(e) => e.stopPropagation()}>
+        <octahedronGeometry args={[2.005, detail]} />
         <meshBasicMaterial
           color="#ffffff"
           wireframe={true}
           transparent={true}
           opacity={0.1}
+          depthTest={false}
         />
       </mesh>
     </group>
