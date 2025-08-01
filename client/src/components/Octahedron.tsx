@@ -13,6 +13,7 @@ export default function Octahedron() {
   const [hoveredTriangle, setHoveredTriangle] = useState<number | null>(null);
   const { camera, raycaster, pointer } = useThree();
   const meshRefs = useRef<(Mesh | null)[]>([]);
+  const lineRef = useRef<THREE.Line | null>(null);
 
   // Detail level for subdivision: 0 = no subdivision, 1 = 4 triangles per face, etc.
   const detail = 3;
@@ -334,6 +335,60 @@ export default function Octahedron() {
 
   const triangles = useMemo(() => createOctahedronTriangles(), [detail]);
 
+  // Calculate triangle centers for pathfinding
+  const triangleCenters = useMemo(() => {
+    const centers = new Map<number, THREE.Vector3>();
+    triangles.forEach(({ geometry, index }) => {
+      const positions = geometry.attributes.position.array as Float32Array;
+      const center = new THREE.Vector3(
+        (positions[0] + positions[3] + positions[6]) / 3,
+        (positions[1] + positions[4] + positions[7]) / 3,
+        (positions[2] + positions[5] + positions[8]) / 3
+      );
+      centers.set(index, center);
+    });
+    return centers;
+  }, [triangles]);
+
+  // Pathfinding using BFS to find shortest path between triangles
+  const findPath = (start: number, end: number): number[] => {
+    if (start === end) return [start];
+    
+    const queue: { triangle: number; path: number[] }[] = [{ triangle: start, path: [start] }];
+    const visited = new Set<number>([start]);
+    
+    while (queue.length > 0) {
+      const { triangle, path } = queue.shift()!;
+      const neighbors = triangleAdjacency.get(triangle) || [];
+      
+      for (const neighbor of neighbors) {
+        if (neighbor === end) {
+          return [...path, neighbor];
+        }
+        
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push({ triangle: neighbor, path: [...path, neighbor] });
+        }
+      }
+    }
+    
+    return []; // No path found
+  };
+
+  // Calculate path when in selection mode and hovering
+  const currentPath = useMemo(() => {
+    if (!selectionMode || hoveredTriangle === null) return [];
+    
+    const selectedTriangles = Array.from(clickedTriangles);
+    if (selectedTriangles.length !== 1) return [];
+    
+    const startTriangle = selectedTriangles[0];
+    if (startTriangle === hoveredTriangle) return [];
+    
+    return findPath(startTriangle, hoveredTriangle);
+  }, [selectionMode, hoveredTriangle, clickedTriangles, triangleAdjacency]);
+
   // Apply cursor style to canvas when in selection mode
   useEffect(() => {
     const canvas = document.querySelector('canvas');
@@ -350,6 +405,26 @@ export default function Octahedron() {
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >
+      {/* Render path line when in selection mode */}
+      {currentPath.length > 1 && (
+        <line ref={lineRef}>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              count={currentPath.length}
+              array={new Float32Array(
+                currentPath.flatMap(triangleIndex => {
+                  const center = triangleCenters.get(triangleIndex);
+                  return center ? [center.x, center.y, center.z] : [0, 0, 0];
+                })
+              )}
+              itemSize={3}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#ff4444" linewidth={3} />
+        </line>
+      )}
+
       {triangles.map(({ geometry, index }) => (
         <mesh
           key={index}
