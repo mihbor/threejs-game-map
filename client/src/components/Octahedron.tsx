@@ -4,48 +4,49 @@ import * as THREE from "three";
 import { Mesh } from "three";
 
 export default function Octahedron() {
-  const meshRef = useRef<Mesh>(null);
+  const groupRef = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
-  const [clickedFaces, setClickedFaces] = useState<Set<number>>(new Set());
+  const [clickedTriangles, setClickedTriangles] = useState<Set<number>>(new Set());
   const { camera, raycaster, pointer } = useThree();
+  const meshRefs = useRef<(Mesh | null)[]>([]);
 
   // Animate the octahedron with slow rotation
   /*useFrame((state, delta) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.x += delta * 0.2;
-      meshRef.current.rotation.y += delta * 0.3;
+    if (groupRef.current) {
+      groupRef.current.rotation.x += delta * 0.2;
+      groupRef.current.rotation.y += delta * 0.3;
       
       // Add slight floating motion
-      meshRef.current.position.y = Math.sin(state.clock.elapsedTime) * 0.1;
+      groupRef.current.position.y = Math.sin(state.clock.elapsedTime) * 0.1;
     }
   });*/
 
-  const detail = 0; // No subdivision for clearer face detection
-
-  // Handle click events with raycasting to detect specific faces
+  // Handle click events with raycasting to detect specific triangles
   const handleClick = (event: THREE.Event) => {
-    if (!meshRef.current) return;
+    if (!groupRef.current) return;
 
     // Update raycaster from mouse position
     raycaster.setFromCamera(pointer, camera);
     
-    // Find intersections with the mesh
-    const intersects = raycaster.intersectObject(meshRef.current);
+    // Find intersections with all meshes in the group
+    const intersects = raycaster.intersectObjects(groupRef.current.children, true);
     
     if (intersects.length > 0) {
       const intersection = intersects[0];
-      if (intersection.face && intersection.faceIndex !== undefined) {
-        // For octahedron, each face is 2 triangles, so we need to map to face groups
-        const faceIndex = Math.floor(intersection.faceIndex / 2);
+      const mesh = intersection.object as THREE.Mesh;
+      
+      // Get the triangle index from the mesh userData
+      if (mesh.userData && mesh.userData.triangleIndex !== undefined) {
+        const triangleIndex = mesh.userData.triangleIndex;
         
-        console.log(`Clicked face index: ${faceIndex}, triangle: ${intersection.faceIndex}`);
+        console.log(`Clicked triangle index: ${triangleIndex}`);
         
-        setClickedFaces(prev => {
+        setClickedTriangles(prev => {
           const newSet = new Set(prev);
-          if (newSet.has(faceIndex)) {
-            newSet.delete(faceIndex); // Toggle off if already clicked
+          if (newSet.has(triangleIndex)) {
+            newSet.delete(triangleIndex); // Toggle off if already clicked
           } else {
-            newSet.add(faceIndex); // Toggle on
+            newSet.add(triangleIndex); // Toggle on
           }
           return newSet;
         });
@@ -53,61 +54,80 @@ export default function Octahedron() {
     }
   };
 
-  // Create vertex colors based on clicked faces
-  useEffect(() => {
-    if (meshRef.current && meshRef.current.geometry) {
-      const geometry = meshRef.current.geometry as THREE.BufferGeometry;
-      const positionAttribute = geometry.getAttribute('position');
-      const vertexCount = positionAttribute.count;
+  // Create octahedron vertices and faces manually
+  const createOctahedronTriangles = () => {
+    // Octahedron vertices
+    const vertices = [
+      new THREE.Vector3(0, 2, 0),    // top
+      new THREE.Vector3(2, 0, 0),    // right
+      new THREE.Vector3(0, 0, 2),    // front
+      new THREE.Vector3(-2, 0, 0),   // left
+      new THREE.Vector3(0, 0, -2),   // back
+      new THREE.Vector3(0, -2, 0),   // bottom
+    ];
+
+    // Define the 8 triangular faces of the octahedron
+    const faces = [
+      [0, 1, 2], // top-right-front
+      [0, 2, 3], // top-front-left
+      [0, 3, 4], // top-left-back
+      [0, 4, 1], // top-back-right
+      [5, 2, 1], // bottom-front-right
+      [5, 3, 2], // bottom-left-front
+      [5, 4, 3], // bottom-back-left
+      [5, 1, 4], // bottom-right-back
+    ];
+
+    return faces.map((face, index) => {
+      const geometry = new THREE.BufferGeometry();
+      const positions: number[] = [];
       
-      // Create color attribute if it doesn't exist
-      if (!geometry.getAttribute('color')) {
-        const colors = new Float32Array(vertexCount * 3);
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-      }
+      // Add vertices for this triangle
+      face.forEach(vertexIndex => {
+        const vertex = vertices[vertexIndex];
+        positions.push(vertex.x, vertex.y, vertex.z);
+      });
       
-      const colorAttribute = geometry.getAttribute('color') as THREE.BufferAttribute;
-      const baseColor = new THREE.Color(hovered ? "#4ecdc4" : "#45b7d1");
-      const clickedColor = new THREE.Color("#ff6b6b");
+      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
+      geometry.computeVertexNormals();
       
-      // Set colors for all vertices
-      for (let i = 0; i < vertexCount; i++) {
-        const faceIndex = Math.floor(i / 3 / 2); // Each face has 2 triangles (6 vertices)
-        const color = clickedFaces.has(faceIndex) ? clickedColor : baseColor;
-        
-        colorAttribute.setXYZ(i, color.r, color.g, color.b);
-      }
-      
-      colorAttribute.needsUpdate = true;
-    }
-  }, [clickedFaces, hovered]);
+      return { geometry, index };
+    });
+  };
+
+  const triangles = createOctahedronTriangles();
 
   return (
-    <mesh
-      ref={meshRef}
+    <group
+      ref={groupRef}
       position={[0, 0, 0]}
       onClick={handleClick}
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
-      castShadow
-      receiveShadow
     >
-      {/* Octahedron geometry without subdivision */}
-      <octahedronGeometry args={[2, detail]} />
-
-      {/* Material with vertex colors enabled */}
-      <meshStandardMaterial
-        vertexColors={true}
-        wireframe={false}
-        metalness={0.3}
-        roughness={0.4}
-        emissive={hovered ? "#001122" : "#000000"}
-        emissiveIntensity={hovered ? 0.1 : 0}
-      />
+      {triangles.map(({ geometry, index }) => (
+        <mesh
+          key={index}
+          ref={el => meshRefs.current[index] = el}
+          geometry={geometry}
+          userData={{ triangleIndex: index }}
+          castShadow
+          receiveShadow
+        >
+          <meshStandardMaterial
+            color={clickedTriangles.has(index) ? "#ff6b6b" : hovered ? "#4ecdc4" : "#45b7d1"}
+            wireframe={false}
+            metalness={0.3}
+            roughness={0.4}
+            emissive={hovered ? "#001122" : "#000000"}
+            emissiveIntensity={hovered ? 0.1 : 0}
+          />
+        </mesh>
+      ))}
 
       {/* Optional wireframe overlay */}
       <mesh>
-        <octahedronGeometry args={[2.01, detail]} />
+        <octahedronGeometry args={[2.01, 0]} />
         <meshBasicMaterial
           color="#ffffff"
           wireframe={true}
@@ -115,6 +135,6 @@ export default function Octahedron() {
           opacity={0.1}
         />
       </mesh>
-    </mesh>
+    </group>
   );
 }
