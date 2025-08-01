@@ -26,64 +26,9 @@ export default function Octahedron() {
     }
   });*/
 
-  // Manual raycasting to find the closest front-facing triangle
+  // Simplified approach: use individual mesh click handlers
   const handleClick = (event: THREE.Event) => {
-    console.log('Group click detected');
-    
-    if (!groupRef.current) return;
-
-    // Update raycaster from mouse position
-    raycaster.setFromCamera(pointer, camera);
-    
-    // Get all triangle meshes (exclude wireframe)
-    const triangleMeshes = groupRef.current.children.filter(child => 
-      child.userData && child.userData.triangleIndex !== undefined
-    );
-    
-    // Find all intersections with triangle meshes
-    const intersects = raycaster.intersectObjects(triangleMeshes, false);
-    
-    // Filter to only front-facing triangles and log detailed info
-    const frontFacingIntersects = intersects.filter(intersection => {
-      if (intersection.face) {
-        // Check if the face normal is pointing toward the camera
-        const worldNormal = intersection.face.normal.clone();
-        const mesh = intersection.object as THREE.Mesh;
-        mesh.localToWorld(worldNormal);
-        const viewDirection = raycaster.ray.direction;
-        const dotProduct = worldNormal.dot(viewDirection);
-        
-        console.log(`Triangle ${intersection.object.userData.triangleIndex}: distance=${intersection.distance.toFixed(3)}, dot=${dotProduct.toFixed(3)}, front-facing=${dotProduct < 0}`);
-        
-        // Front-facing if dot product is negative (normal points toward camera)
-        return dotProduct < 0;
-      }
-      return false;
-    });
-    
-    console.log(`Found ${intersects.length} total intersections, ${frontFacingIntersects.length} front-facing`);
-    
-    if (frontFacingIntersects.length > 0) {
-      // Sort by distance to get the closest front-facing triangle
-      frontFacingIntersects.sort((a, b) => a.distance - b.distance);
-      const closestIntersection = frontFacingIntersects[0];
-      const triangleIndex = closestIntersection.object.userData.triangleIndex;
-      
-      console.log(`Selected closest front-facing triangle: ${triangleIndex} at distance ${closestIntersection.distance.toFixed(3)}`);
-      
-      setClickedTriangles(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(triangleIndex)) {
-          newSet.delete(triangleIndex);
-        } else {
-          newSet.add(triangleIndex);
-        }
-        console.log('Updated clicked triangles:', Array.from(newSet));
-        return newSet;
-      });
-    } else {
-      console.log('No front-facing triangles found');
-    }
+    // Group handler disabled - let individual meshes handle clicks
   };
 
   // Subdivide a triangle into 4 smaller triangles
@@ -193,7 +138,6 @@ export default function Octahedron() {
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >
-      {/* Individual mesh clicks disabled in favor of group raycasting */}
       {triangles.map(({ geometry, index }) => (
         <mesh
           key={index}
@@ -202,6 +146,20 @@ export default function Octahedron() {
           userData={{ triangleIndex: index }}
           castShadow
           receiveShadow
+          onClick={(e) => {
+            e.stopPropagation();
+            console.log(`Direct click on triangle ${index}, point:`, e.point, 'distance:', e.distance);
+            setClickedTriangles((prev) => {
+              const newSet = new Set(prev);
+              if (newSet.has(index)) {
+                newSet.delete(index);
+              } else {
+                newSet.add(index);
+              }
+              console.log("Updated clicked triangles:", Array.from(newSet));
+              return newSet;
+            });
+          }}
         >
           <meshStandardMaterial
             color={
@@ -216,7 +174,7 @@ export default function Octahedron() {
             roughness={0.4}
             emissive={hovered ? "#001122" : "#000000"}
             emissiveIntensity={hovered ? 0.1 : 0}
-            side={THREE.FrontSide}
+            side={THREE.DoubleSide}
           />
         </mesh>
       ))}
