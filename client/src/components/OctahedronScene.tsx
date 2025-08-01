@@ -11,24 +11,24 @@ export default function OctahedronScene() {
     const handleResize = () => {
       const width = window.innerWidth;
       const height = window.innerHeight;
-      
+
       // Update camera aspect ratio
-      if ('aspect' in camera) {
+      if ("aspect" in camera) {
         (camera as any).aspect = width / height;
         camera.updateProjectionMatrix();
       }
-      
+
       // Update renderer size
       gl.setSize(width, height);
     };
 
-    window.addEventListener('resize', handleResize);
-    
+    window.addEventListener("resize", handleResize);
+
     // Initial size setup
     handleResize();
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener("resize", handleResize);
     };
   }, [gl, camera]);
 
@@ -36,8 +36,8 @@ export default function OctahedronScene() {
     <>
       {/* Lighting */}
       <ambientLight intensity={0.4} />
-      <directionalLight 
-        position={[10, 10, 5]} 
+      <directionalLight
+        position={[10, 10, 5]}
         intensity={1}
         castShadow
         shadow-mapSize-width={2048}
@@ -48,18 +48,15 @@ export default function OctahedronScene() {
         shadow-camera-top={10}
         shadow-camera-bottom={-10}
       />
-      
+
       {/* Additional directional light for better illumination */}
-      <directionalLight 
-        position={[-5, 5, -5]} 
-        intensity={0.5}
-      />
+      <directionalLight position={[-5, 5, -5]} intensity={0.5} />
 
       {/* Octahedron */}
       <Octahedron />
 
       {/* Camera Controls */}
-      <OrbitControls 
+      <OrbitControls
         enablePan={true}
         enableZoom={true}
         enableRotate={true}
@@ -67,11 +64,11 @@ export default function OctahedronScene() {
         maxDistance={20}
         autoRotate={false}
         autoRotateSpeed={0.5}
-        target={[0, 1.5, 0]}
+        target={[0, 0, 0]}
       />
 
       {/* Optional: Add a grid helper for reference */}
-      <gridHelper args={[10, 10, '#444444', '#222222']} position={[0, -2, 0]} />
+      <gridHelper args={[10, 10, "#444444", "#222222"]} position={[0, -2, 0]} />
     </>
   );
 }
