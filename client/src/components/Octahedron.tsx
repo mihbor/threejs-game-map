@@ -9,11 +9,13 @@ export default function Octahedron() {
   const [clickedTriangles, setClickedTriangles] = useState<Set<number>>(
     new Set(),
   );
+  const [selectionMode, setSelectionMode] = useState(false); // G key mode
+  const [hoveredTriangle, setHoveredTriangle] = useState<number | null>(null);
   const { camera, raycaster, pointer } = useThree();
   const meshRefs = useRef<(Mesh | null)[]>([]);
 
   // Detail level for subdivision: 0 = no subdivision, 1 = 4 triangles per face, etc.
-  const detail = 4;
+  const detail = 3;
 
   // Subdivide a triangle into 4 smaller triangles
   const subdivideTriangle = (
@@ -55,7 +57,7 @@ export default function Octahedron() {
   // Create individual triangle geometries for each face
   const createOctahedronTriangles = () => {
     console.log("Creating octahedron triangles...");
-    
+
     const baseOctahedron = new THREE.OctahedronGeometry(2, 0);
     const positions = baseOctahedron.attributes.position.array as Float32Array;
     const indices = baseOctahedron.index?.array as Uint16Array;
@@ -63,48 +65,79 @@ export default function Octahedron() {
     console.log("Base octahedron created:", {
       positionsLength: positions.length,
       indicesLength: indices?.length,
-      hasIndices: !!indices
+      hasIndices: !!indices,
     });
 
-    const allTriangles: { geometry: THREE.BufferGeometry; index: number }[] = [];
+    const allTriangles: { geometry: THREE.BufferGeometry; index: number }[] =
+      [];
     let triangleIndex = 0;
 
     // Handle both indexed and non-indexed geometries
     let faceCount: number;
     if (indices) {
-      console.log(`Processing ${indices.length / 3} faces with detail level ${detail} (indexed)`);
+      console.log(
+        `Processing ${indices.length / 3} faces with detail level ${detail} (indexed)`,
+      );
       faceCount = indices.length / 3;
     } else {
-      console.log(`Processing ${positions.length / 9} faces with detail level ${detail} (non-indexed)`);
+      console.log(
+        `Processing ${positions.length / 9} faces with detail level ${detail} (non-indexed)`,
+      );
       faceCount = positions.length / 9;
     }
 
     // Process each face of the base octahedron
     for (let i = 0; i < faceCount; i++) {
       let v1: THREE.Vector3, v2: THREE.Vector3, v3: THREE.Vector3;
-      
+
       if (indices) {
         // Use indices to get vertices
         const i1 = indices[i * 3];
         const i2 = indices[i * 3 + 1];
         const i3 = indices[i * 3 + 2];
-        
-        v1 = new THREE.Vector3(positions[i1 * 3], positions[i1 * 3 + 1], positions[i1 * 3 + 2]);
-        v2 = new THREE.Vector3(positions[i2 * 3], positions[i2 * 3 + 1], positions[i2 * 3 + 2]);
-        v3 = new THREE.Vector3(positions[i3 * 3], positions[i3 * 3 + 1], positions[i3 * 3 + 2]);
+
+        v1 = new THREE.Vector3(
+          positions[i1 * 3],
+          positions[i1 * 3 + 1],
+          positions[i1 * 3 + 2],
+        );
+        v2 = new THREE.Vector3(
+          positions[i2 * 3],
+          positions[i2 * 3 + 1],
+          positions[i2 * 3 + 2],
+        );
+        v3 = new THREE.Vector3(
+          positions[i3 * 3],
+          positions[i3 * 3 + 1],
+          positions[i3 * 3 + 2],
+        );
       } else {
         // Use direct position data
         const startIndex = i * 9;
-        v1 = new THREE.Vector3(positions[startIndex], positions[startIndex + 1], positions[startIndex + 2]);
-        v2 = new THREE.Vector3(positions[startIndex + 3], positions[startIndex + 4], positions[startIndex + 5]);
-        v3 = new THREE.Vector3(positions[startIndex + 6], positions[startIndex + 7], positions[startIndex + 8]);
+        v1 = new THREE.Vector3(
+          positions[startIndex],
+          positions[startIndex + 1],
+          positions[startIndex + 2],
+        );
+        v2 = new THREE.Vector3(
+          positions[startIndex + 3],
+          positions[startIndex + 4],
+          positions[startIndex + 5],
+        );
+        v3 = new THREE.Vector3(
+          positions[startIndex + 6],
+          positions[startIndex + 7],
+          positions[startIndex + 8],
+        );
       }
 
-      console.log(`Face ${i/3}: vertices`, v1, v2, v3);
+      console.log(`Face ${i / 3}: vertices`, v1, v2, v3);
 
       // Subdivide this triangle
       const subdivided = subdivideTriangle(v1, v2, v3, detail);
-      console.log(`Face ${i/3} subdivided into ${subdivided.length} triangles`);
+      console.log(
+        `Face ${i / 3} subdivided into ${subdivided.length} triangles`,
+      );
 
       subdivided.forEach((triangle) => {
         const geometry = new THREE.BufferGeometry();
@@ -138,102 +171,130 @@ export default function Octahedron() {
   const triangleAdjacency = useMemo(() => {
     const adjacency = new Map<number, number[]>();
     const triangles = createOctahedronTriangles();
-    
-    console.log(`Created ${triangles.length} triangles for adjacency calculation`);
-    
+
+    console.log(
+      `Created ${triangles.length} triangles for adjacency calculation`,
+    );
+
     // Helper function to check if two triangles share an edge (2 vertices)
-    const shareEdge = (tri1: THREE.BufferGeometry, tri2: THREE.BufferGeometry): boolean => {
+    const shareEdge = (
+      tri1: THREE.BufferGeometry,
+      tri2: THREE.BufferGeometry,
+    ): boolean => {
       const pos1 = tri1.attributes.position.array as Float32Array;
       const pos2 = tri2.attributes.position.array as Float32Array;
-      
+
       const vertices1 = [];
       const vertices2 = [];
-      
+
       // Extract vertices from both triangles
       for (let i = 0; i < 9; i += 3) {
         vertices1.push([pos1[i], pos1[i + 1], pos1[i + 2]]);
         vertices2.push([pos2[i], pos2[i + 1], pos2[i + 2]]);
       }
-      
+
       // Count shared vertices (vertices that are very close to each other)
       let sharedVertices = 0;
       const tolerance = 0.001;
-      
+
       for (const v1 of vertices1) {
         for (const v2 of vertices2) {
           const dx = Math.abs(v1[0] - v2[0]);
           const dy = Math.abs(v1[1] - v2[1]);
           const dz = Math.abs(v1[2] - v2[2]);
-          
+
           if (dx < tolerance && dy < tolerance && dz < tolerance) {
             sharedVertices++;
             break; // Found a match, move to next vertex in vertices1
           }
         }
       }
-      
+
       // Triangles share an edge if they have exactly 2 vertices in common
       return sharedVertices === 2;
     };
-    
+
     // Calculate adjacency for each triangle
     triangles.forEach((triangle, index) => {
       const neighbors: number[] = [];
-      
+
       // Check against all other triangles
       triangles.forEach((otherTriangle, otherIndex) => {
-        if (index !== otherIndex && shareEdge(triangle.geometry, otherTriangle.geometry)) {
+        if (
+          index !== otherIndex &&
+          shareEdge(triangle.geometry, otherTriangle.geometry)
+        ) {
           neighbors.push(otherIndex);
         }
       });
-      
+
       adjacency.set(index, neighbors);
       if (neighbors.length > 0) {
-        console.log(`Triangle ${index} has ${neighbors.length} edge-sharing neighbors: [${neighbors.slice(0, 5).join(', ')}${neighbors.length > 5 ? '...' : ''}]`);
+        console.log(
+          `Triangle ${index} has ${neighbors.length} edge-sharing neighbors: [${neighbors.slice(0, 5).join(", ")}${neighbors.length > 5 ? "..." : ""}]`,
+        );
       }
     });
-    
+
     console.log(`Adjacency map created with ${adjacency.size} entries`);
     return adjacency;
   }, [detail]);
 
-  // Keyboard navigation
+  // Keyboard navigation and G key mode
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Only handle navigation if a triangle is selected
+      // Handle G key for selection mode toggle
+      if (event.key === 'g' || event.key === 'G') {
+        const selectedTriangles = Array.from(clickedTriangles);
+        if (selectedTriangles.length === 1) {
+          setSelectionMode(!selectionMode);
+          setHoveredTriangle(null); // Clear any hover when toggling
+          console.log(`Selection mode ${!selectionMode ? 'enabled' : 'disabled'}`);
+          event.preventDefault();
+          return;
+        }
+      }
+
+      // Only handle navigation if a triangle is selected and not in selection mode
+      if (selectionMode) return;
+      
       const selectedTriangles = Array.from(clickedTriangles);
       if (selectedTriangles.length !== 1) return;
-      
+
       const currentTriangle = selectedTriangles[0];
       const neighbors = triangleAdjacency.get(currentTriangle) || [];
-      
+
       if (neighbors.length === 0) return;
-      
+
       let nextTriangle: number | null = null;
-      
+
       // Since each triangle has exactly 3 neighbors, map keys to cycle through them
       switch (event.key) {
-        case 'ArrowUp':
-        case 'w':
-        case 'W':
+        case "ArrowUp":
+        case "w":
+        case "W":
           // Move to first neighbor
           nextTriangle = neighbors[0];
           break;
-        case 'ArrowDown':
-        case 's':
-        case 'S':
+        case "ArrowDown":
+        case "s":
+        case "S":
           // Move to second neighbor (if available)
-          nextTriangle = neighbors[1] !== undefined ? neighbors[1] : neighbors[0];
+          nextTriangle =
+            neighbors[1] !== undefined ? neighbors[1] : neighbors[0];
           break;
-        case 'ArrowLeft':
-        case 'a':
-        case 'A':
+        case "ArrowLeft":
+        case "a":
+        case "A":
           // Move to third neighbor (cycling back)
-          nextTriangle = neighbors[2] !== undefined ? neighbors[2] : neighbors[neighbors.length - 1];
+          nextTriangle =
+            neighbors[2] !== undefined
+              ? neighbors[2]
+              : neighbors[neighbors.length - 1];
           break;
-        case 'ArrowRight':
-        case 'd':
-        case 'D':
+        case "ArrowRight":
+        case "d":
+        case "D":
           // Cycle forward through neighbors (1 -> 2 -> 0 -> 1...)
           const currentIndex = neighbors.indexOf(currentTriangle);
           let nextIndex = 0; // Default to first neighbor
@@ -242,24 +303,29 @@ export default function Octahedron() {
             nextIndex = 0;
           } else {
             // Find which neighbor we came from and move to the next one
-            nextIndex = (neighbors.indexOf(neighbors.find(n => n > currentTriangle) || neighbors[0])) % neighbors.length;
+            nextIndex =
+              neighbors.indexOf(
+                neighbors.find((n) => n > currentTriangle) || neighbors[0],
+              ) % neighbors.length;
           }
           nextTriangle = neighbors[nextIndex];
           break;
         default:
           return;
       }
-      
+
       if (nextTriangle !== null) {
         event.preventDefault();
-        console.log(`Keyboard navigation: moving from triangle ${currentTriangle} to ${nextTriangle}`);
+        console.log(
+          `Keyboard navigation: moving from triangle ${currentTriangle} to ${nextTriangle}`,
+        );
         setClickedTriangles(new Set([nextTriangle]));
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [clickedTriangles, triangleAdjacency]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [clickedTriangles, triangleAdjacency, selectionMode]);
 
   // Simplified approach: use individual mesh click handlers
   const handleClick = (event: THREE.Event) => {
@@ -267,6 +333,14 @@ export default function Octahedron() {
   };
 
   const triangles = useMemo(() => createOctahedronTriangles(), [detail]);
+
+  // Apply cursor style to canvas when in selection mode
+  useEffect(() => {
+    const canvas = document.querySelector('canvas');
+    if (canvas) {
+      canvas.style.cursor = selectionMode ? 'crosshair' : 'default';
+    }
+  }, [selectionMode]);
 
   return (
     <group
@@ -305,14 +379,28 @@ export default function Octahedron() {
               }
             });
           }}
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            if (selectionMode) {
+              setHoveredTriangle(index);
+            }
+          }}
+          onPointerOut={(e) => {
+            e.stopPropagation();
+            if (selectionMode) {
+              setHoveredTriangle(null);
+            }
+          }}
         >
           <meshStandardMaterial
             color={
               clickedTriangles.has(index)
-                ? "#ff6b6b"
-                : hovered
-                  ? "#4ecdc4"
-                  : "#45b7d1"
+                ? "#ff6b6b" // Selected triangle stays red
+                : selectionMode && hoveredTriangle === index
+                  ? "#ffff00" // Yellow hover in selection mode
+                  : hovered
+                    ? "#4ecdc4"
+                    : "#45b7d1"
             }
             wireframe={false}
             metalness={0.3}
@@ -323,7 +411,6 @@ export default function Octahedron() {
           />
         </mesh>
       ))}
-
     </group>
   );
 }
