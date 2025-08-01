@@ -30,7 +30,7 @@ export default function Octahedron() {
       receiveShadow
     >
       {/* Octahedron geometry with subdivision */}
-      <octahedronGeometry args={[2, 2 ** detail - 1]} />
+      <octahedronGeometry args={[1.5, 2]} />
 
       {/* Material with wireframe option */}
       <meshStandardMaterial
@@ -44,7 +44,7 @@ export default function Octahedron() {
 
       {/* Optional wireframe overlay */}
       <mesh>
-        <octahedronGeometry args={[2.01, 2 ** detail - 1]} />
+        <octahedronGeometry args={[1.51, 2]} />
         <meshBasicMaterial
           color="#ffffff"
           wireframe={true}
