@@ -22,12 +22,12 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
 
   // Octahedron base vertices
   const baseVerts = [
-    new THREE.Vector3(1, 0, 0),
-    new THREE.Vector3(-1, 0, 0),
-    new THREE.Vector3(0, 1, 0),
-    new THREE.Vector3(0, -1, 0),
-    new THREE.Vector3(0, 0, 1),
-    new THREE.Vector3(0, 0, -1),
+    new THREE.Vector3(2, 0, 0),
+    new THREE.Vector3(-2, 0, 0),
+    new THREE.Vector3(0, 2, 0),
+    new THREE.Vector3(0, -2, 0),
+    new THREE.Vector3(0, 0, 2),
+    new THREE.Vector3(0, 0, -2),
   ];
 
   // 8 faces, each as 3 indices into baseVerts
@@ -56,7 +56,6 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
     if (level === 0) {
       return [[v1, v2, v3]];
     }
-
     // Calculate midpoints and normalize to sphere surface
     const m1 = new THREE.Vector3()
       .addVectors(v1, v2)
@@ -73,7 +72,6 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
       .multiplyScalar(0.5)
       .normalize()
       .multiplyScalar(2);
-
     // Recursively subdivide the 4 sub-triangles
     return [
       ...subdivideTriangle(v1, m1, m3, level - 1),
@@ -95,6 +93,16 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
       const detail = regionDetails[regionIdx] || 0;
       const subdivided = subdivideTriangle(v1, v2, v3, detail);
       subdivided.forEach((triangle, localIdx) => {
+        // Log triangles that touch the poles
+        [4, 5].forEach(poleIdx => {
+          if (
+            (Math.abs(triangle[0].x - baseVerts[poleIdx].x) < 1e-6 && Math.abs(triangle[0].y - baseVerts[poleIdx].y) < 1e-6 && Math.abs(triangle[0].z - baseVerts[poleIdx].z) < 1e-6) ||
+            (Math.abs(triangle[1].x - baseVerts[poleIdx].x) < 1e-6 && Math.abs(triangle[1].y - baseVerts[poleIdx].y) < 1e-6 && Math.abs(triangle[1].z - baseVerts[poleIdx].z) < 1e-6) ||
+            (Math.abs(triangle[2].x - baseVerts[poleIdx].x) < 1e-6 && Math.abs(triangle[2].y - baseVerts[poleIdx].y) < 1e-6 && Math.abs(triangle[2].z - baseVerts[poleIdx].z) < 1e-6)
+          ) {
+            console.log(`[${new Date().toLocaleTimeString()}] Triangle at pole baseVerts[${poleIdx}]:`, triangle.map(v => ({x: v.x, y: v.y, z: v.z})));
+          }
+        });
         const geometry = new THREE.BufferGeometry();
         const positions = triangle.flatMap(v => [v.x, v.y, v.z]);
         geometry.setAttribute(
@@ -448,6 +456,17 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
     }
     return null;
   }, [selectionMode, hoveredTriangle, clickedTriangles, triangleCenters, findPath]);
+
+  // Debug: Log baseVerts to check for zero vectors
+  useEffect(() => {
+    baseVerts.forEach((v, i) => {
+      if (v.x === 0 && v.y === 0 && v.z === 0) {
+        console.warn(`[${new Date().toLocaleTimeString()}] baseVerts[${i}] is zero vector!`, v);
+      } else {
+        console.log(`[${new Date().toLocaleTimeString()}] baseVerts[${i}]:`, v);
+      }
+    });
+  }, []);
 
   return (
     <group
