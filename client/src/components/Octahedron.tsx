@@ -6,9 +6,7 @@ import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 
-export default function Octahedron() {
-  // Detail level for subdivision of octahedron faces: 0 = no subdivision, 1 = 4 triangles per face, etc.
-  const detail = 5;
+export default function Octahedron({ detail = 5 }: { detail?: number }) {
   const groupRef = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
   const [clickedTriangles, setClickedTriangles] = useState<Set<number>>(
