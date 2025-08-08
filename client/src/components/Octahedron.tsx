@@ -5,19 +5,45 @@ import { Mesh } from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
 import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import OctahedronRegion from "./OctahedronRegion";
 
-export default function Octahedron({ detail = 5 }: { detail?: number }) {
+export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regionDetails?: number[] }) {
+  // Refs
   const groupRef = useRef<THREE.Group>(null);
-  const [hovered, setHovered] = useState(false);
-  const [clickedTriangles, setClickedTriangles] = useState<Set<number>>(
-    new Set(),
-  );
-  const [selectionMode, setSelectionMode] = useState(false); // G key mode
-  const [hoveredTriangle, setHoveredTriangle] = useState<number | null>(null);
-  const { camera, raycaster, pointer } = useThree();
   const meshRefs = useRef<(Mesh | null)[]>([]);
   const lineRef = useRef<Line2 | null>(null);
+  const { camera, raycaster, pointer } = useThree();
 
+  // State declarations
+  const [hovered, setHovered] = useState(false);
+  const [clickedTriangles, setClickedTriangles] = useState<Set<number>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [hoveredTriangle, setHoveredTriangle] = useState<number | null>(null);
+
+  // Octahedron base vertices
+  const baseVerts = [
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(-1, 0, 0),
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, -1, 0),
+    new THREE.Vector3(0, 0, 1),
+    new THREE.Vector3(0, 0, -1),
+  ];
+
+  // 8 faces, each as 3 indices into baseVerts
+  const faces = [
+    [0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4],
+    [0, 5, 2], [2, 5, 1], [1, 5, 3], [3, 5, 0],
+  ];
+
+  // Handler for triangle click
+  function handleTriangleClick(triangleIndex: number) {
+    setClickedTriangles((prev) => {
+      if (prev.has(triangleIndex)) return new Set();
+      return new Set([triangleIndex]);
+    });
+    setSelectionMode(false);
+  }
 
   // Subdivide a triangle into 4 smaller triangles
   const subdivideTriangle = (
@@ -75,18 +101,7 @@ export default function Octahedron({ detail = 5 }: { detail?: number }) {
     let triangleIndex = 0;
 
     // Handle both indexed and non-indexed geometries
-    let faceCount: number;
-    if (indices) {
-      console.log(
-        `[${new Date().toLocaleTimeString()}] Processing ${indices.length / 3} faces with detail level ${detail} (indexed)`,
-      );
-      faceCount = indices.length / 3;
-    } else {
-      console.log(
-        `[${new Date().toLocaleTimeString()}] Processing ${positions.length / 9} faces with detail level ${detail} (non-indexed)`,
-      );
-      faceCount = positions.length / 9;
-    }
+    const faceCount = indices ? indices.length / 3 : positions.length / 9;
 
     // Process each face of the base octahedron
     for (let i = 0; i < faceCount; i++) {
@@ -94,69 +109,32 @@ export default function Octahedron({ detail = 5 }: { detail?: number }) {
 
       if (indices) {
         // Use indices to get vertices
-        const i1 = indices[i * 3];
-        const i2 = indices[i * 3 + 1];
-        const i3 = indices[i * 3 + 2];
-
-        v1 = new THREE.Vector3(
-          positions[i1 * 3],
-          positions[i1 * 3 + 1],
-          positions[i1 * 3 + 2],
-        );
-        v2 = new THREE.Vector3(
-          positions[i2 * 3],
-          positions[i2 * 3 + 1],
-          positions[i2 * 3 + 2],
-        );
-        v3 = new THREE.Vector3(
-          positions[i3 * 3],
-          positions[i3 * 3 + 1],
-          positions[i3 * 3 + 2],
-        );
+        const [i1, i2, i3] = [indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]];
+        v1 = new THREE.Vector3().fromArray(positions, i1 * 3);
+        v2 = new THREE.Vector3().fromArray(positions, i2 * 3);
+        v3 = new THREE.Vector3().fromArray(positions, i3 * 3);
       } else {
         // Use direct position data
         const startIndex = i * 9;
-        v1 = new THREE.Vector3(
-          positions[startIndex],
-          positions[startIndex + 1],
-          positions[startIndex + 2],
-        );
-        v2 = new THREE.Vector3(
-          positions[startIndex + 3],
-          positions[startIndex + 4],
-          positions[startIndex + 5],
-        );
-        v3 = new THREE.Vector3(
-          positions[startIndex + 6],
-          positions[startIndex + 7],
-          positions[startIndex + 8],
-        );
+        v1 = new THREE.Vector3().fromArray(positions, startIndex);
+        v2 = new THREE.Vector3().fromArray(positions, startIndex + 3);
+        v3 = new THREE.Vector3().fromArray(positions, startIndex + 6);
       }
 
-      // Subdivide this triangle
-      const subdivided = subdivideTriangle(v1, v2, v3, detail);
+      // Use maximum detail level from regionDetails for initial geometry creation
+      const maxDetail = Math.max(...regionDetails);
+      const subdivided = subdivideTriangle(v1, v2, v3, maxDetail);
 
       subdivided.forEach((triangle) => {
         const geometry = new THREE.BufferGeometry();
-        const positions = [
-          triangle[0].x,
-          triangle[0].y,
-          triangle[0].z,
-          triangle[1].x,
-          triangle[1].y,
-          triangle[1].z,
-          triangle[2].x,
-          triangle[2].y,
-          triangle[2].z,
-        ];
+        const positions = triangle.flatMap(v => [v.x, v.y, v.z]);
         geometry.setAttribute(
           "position",
           new THREE.BufferAttribute(new Float32Array(positions), 3),
         );
         geometry.computeVertexNormals();
 
-        allTriangles.push({ geometry, index: triangleIndex });
-        triangleIndex++;
+        allTriangles.push({ geometry, index: triangleIndex++ });
       });
     }
 
@@ -165,7 +143,7 @@ export default function Octahedron({ detail = 5 }: { detail?: number }) {
   };
 
   // Memoize triangles to avoid unnecessary recalculation
-  const triangles = useMemo(() => createOctahedronTriangles(), [detail]);
+  const triangles = useMemo(() => createOctahedronTriangles(), [regionDetails]);
 
   // Calculate triangle adjacency for keyboard navigation (optimized)
   const triangleAdjacency = useMemo(() => {
@@ -445,6 +423,45 @@ export default function Octahedron({ detail = 5 }: { detail?: number }) {
     };
   }, []);
 
+  // Memoize path rendering function
+  const renderPath = useMemo(() => {
+    if (!selectionMode || hoveredTriangle === null || clickedTriangles.size !== 1) {
+      return null;
+    }
+
+    const selectedTriangle = Array.from(clickedTriangles)[0];
+    const path = findPath(selectedTriangle, hoveredTriangle);
+
+    if (path.length > 1) {
+      const pathPoints = path.map(triangleIndex => {
+        const center = triangleCenters.get(triangleIndex);
+        return center ? center.clone().normalize().multiplyScalar(2.05) : new THREE.Vector3(0, 0, 0);
+      });
+
+      const positions: number[] = [];
+      pathPoints.forEach(point => {
+        positions.push(point.x, point.y, point.z);
+      });
+
+      const geometry = new LineGeometry();
+      geometry.setPositions(positions);
+
+      return (
+        <primitive
+          object={new Line2(geometry,
+            new LineMaterial({
+              color: "#ff4444",
+              linewidth: 3,
+              resolution: new THREE.Vector2(window.innerWidth, window.innerHeight)
+            })
+          )}
+          ref={lineRef}
+        />
+      );
+    }
+    return null;
+  }, [selectionMode, hoveredTriangle, clickedTriangles, triangleCenters, findPath]);
+
   return (
     <group
       ref={groupRef}
@@ -453,110 +470,20 @@ export default function Octahedron({ detail = 5 }: { detail?: number }) {
       onPointerOver={() => setHovered(true)}
       onPointerOut={() => setHovered(false)}
     >
-      {/* Render path line when in selection mode */}
-      {selectionMode && hoveredTriangle !== null && clickedTriangles.size === 1 && (() => {
-        const selectedTriangle = Array.from(clickedTriangles)[0];
-        const path = findPath(selectedTriangle, hoveredTriangle);
+      {renderPath}
 
-        if (path.length > 1) {
-          console.log(
-            `[${new Date().toLocaleTimeString()}] Rendering path:`, path
-          );
-          const pathPoints = path.map(triangleIndex => {
-            const center = triangleCenters.get(triangleIndex);
-            return center ? center.clone().normalize().multiplyScalar(2.05) : new THREE.Vector3(0, 0, 0);
-          });
-
-          // Create positions array for LineGeometry
-          const positions: number[] = [];
-          pathPoints.forEach(point => {
-            positions.push(point.x, point.y, point.z);
-          });
-
-          // Create LineGeometry
-          const geometry = new LineGeometry();
-          geometry.setPositions(positions);
-
-          return (
-            <primitive 
-              object={new Line2(geometry, 
-                new LineMaterial({ 
-                  color: "#ff4444", 
-                  linewidth: 3,
-                  resolution: new THREE.Vector2(window.innerWidth, window.innerHeight) // needed for proper width
-                })
-              )} 
-              ref={lineRef} 
-            />
-          );
-        }
-        return null;
-      })()}
-
-      {/* Render individual triangle meshes */}
-      {triangles.map(({ geometry, index }) => (
-        <mesh
-          key={index}
-          ref={(el) => (meshRefs.current[index] = el)}
-          geometry={geometry}
-          userData={{ triangleIndex: index }}
-          castShadow
-          receiveShadow
-          onClick={(e) => {
-            e.stopPropagation();
-            console.log(
-              `[${new Date().toLocaleTimeString()}] Direct click on triangle ${index}, point:`,
-              e.point,
-              'distance:',
-              e.distance,
-            );
-
-            // Disable selection mode when clicking on a triangle
-            if (selectionMode) {
-              console.log(`Disabling selection mode due to click on triangle ${index} [${new Date().toLocaleTimeString()}]`);
-              setSelectionMode(false);
-            }
-
-            setClickedTriangles((prev) => {
-              // Only one triangle can be selected at a time
-              if (prev.has(index)) {
-                // If clicking the currently selected triangle, deselect it
-                console.log(`Deselecting triangle ${index} [${new Date().toLocaleTimeString()}]`);
-                return new Set();
-              } else {
-                // Select the new triangle (replacing any previous selection)
-                console.log(`Selecting triangle ${index} [${new Date().toLocaleTimeString()}]`);
-                return new Set([index]);
-              }
-            });
-          }}
-          onPointerOver={(e) => {
-            e.stopPropagation();
-            if (selectionMode) {
-              setHoveredTriangle(index);
-            }
-          }}
-          onPointerOut={(e) => {
-            e.stopPropagation();
-            if (selectionMode) {
-              setHoveredTriangle(null);
-            }
-          }}
-        >
-          <meshStandardMaterial
-            color={
-              clickedTriangles.has(index)
-                ? "#ff6b6b"
-                : selectionMode && hoveredTriangle === index
-                ? "#ffff00"
-                : "#45b7d1"
-            }
-            wireframe={false}
-            metalness={0.3}
-            roughness={0.4}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
+      {faces.map((face, i) => (
+        <OctahedronRegion
+          key={i}
+          baseVertices={[baseVerts[face[0]], baseVerts[face[1]], baseVerts[face[2]]]}
+          detail={regionDetails[i] || 0}
+          regionIndex={i}
+          onTriangleClick={handleTriangleClick}
+          selectedTriangles={clickedTriangles}
+          selectionMode={selectionMode}
+          hoveredTriangle={hoveredTriangle}
+          setHoveredTriangle={setHoveredTriangle}
+        />
       ))}
     </group>
   );

@@ -1,12 +1,42 @@
 import { OrbitControls } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useState, useRef } from "react";
+import * as THREE from "three";
 import Octahedron from "./Octahedron.tsx";
 
 export default function OctahedronScene() {
   const { gl, camera } = useThree();
-  const [lodDetail, setLodDetail] = useState(2); // Start with low detail
-  const lastLodRef = useRef(lodDetail);
+  // Per-region LOD state
+  const [regionDetails, setRegionDetails] = useState([2, 2, 2, 2, 2, 2, 2, 2]);
+  const lastRegionDetails = useRef(regionDetails);
+
+  // Octahedron base vertices and faces (same as in Octahedron)
+  const baseVerts = [
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(-1, 0, 0),
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, -1, 0),
+    new THREE.Vector3(0, 0, 1),
+    new THREE.Vector3(0, 0, -1),
+  ];
+  const faces = [
+    [0, 2, 4],
+    [2, 1, 4],
+    [1, 3, 4],
+    [3, 0, 4],
+    [0, 5, 2],
+    [2, 5, 1],
+    [1, 5, 3],
+    [3, 5, 0],
+  ];
+
+  // Compute face centers for LOD
+  const faceCenters = faces.map((face) => {
+    const v1 = baseVerts[face[0]],
+      v2 = baseVerts[face[1]],
+      v3 = baseVerts[face[2]];
+    return new THREE.Vector3().addVectors(v1, v2).add(v3).multiplyScalar(1 / 3);
+  });
 
   // Handle window resize
   useEffect(() => {
@@ -34,17 +64,20 @@ export default function OctahedronScene() {
     };
   }, [gl, camera]);
 
-  // Dynamic LOD: update detail based on camera distance
+  // Dynamic per-region LOD: update detail for each region based on camera distance
   useFrame(() => {
-    const distance = camera.position.length(); // Distance from origin
-    let newDetail = 1;
-    if (distance < 4) newDetail = 6;
-    else if (distance < 8) newDetail = 4;
-    else if (distance < 14) newDetail = 2;
-    else newDetail = 1;
-    if (lastLodRef.current !== newDetail) {
-      setLodDetail(newDetail);
-      lastLodRef.current = newDetail;
+    const newRegionDetails = faceCenters.map((center) => {
+      const worldCenter = center.clone();
+      const distance = camera.position.distanceTo(worldCenter);
+      if (distance < 4) return 6;
+      if (distance < 8) return 4;
+      if (distance < 14) return 2;
+      return 1;
+    });
+    // Only update if changed
+    if (JSON.stringify(lastRegionDetails.current) !== JSON.stringify(newRegionDetails)) {
+      setRegionDetails(newRegionDetails);
+      lastRegionDetails.current = newRegionDetails;
     }
   });
 
@@ -65,8 +98,8 @@ export default function OctahedronScene() {
         shadow-camera-bottom={-10}
       />
 
-      {/* Octahedron with dynamic LOD */}
-      <Octahedron detail={lodDetail} />
+      {/* Octahedron with per-region dynamic LOD */}
+      <Octahedron regionDetails={regionDetails} />
 
       {/* Camera Controls */}
       <OrbitControls
