@@ -83,50 +83,18 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
     ];
   };
 
-  // Create individual triangle geometries for each face
-  const createOctahedronTriangles = () => {
-    console.log(`[${new Date().toLocaleTimeString()}] Creating octahedron triangles...`);
-
-    const baseOctahedron = new THREE.OctahedronGeometry(2, 0);
-    const positions = baseOctahedron.attributes.position.array as Float32Array;
-    const indices = baseOctahedron.index?.array as Uint16Array;
-
-    console.log(`[${new Date().toLocaleTimeString()}] Base octahedron created:`, {
-      positionsLength: positions.length,
-      indicesLength: indices?.length,
-      hasIndices: !!indices,
-    });
-
-    const allTriangles: { geometry: THREE.BufferGeometry; index: number }[] =
-      [];
+  // Create individual triangle geometries for each face, and group by region
+  const createOctahedronTrianglesByRegion = () => {
+    const allTriangles: { geometry: THREE.BufferGeometry; index: number; region: number; localIndex: number }[] = [];
     let triangleIndex = 0;
-
-    // Handle both indexed and non-indexed geometries
-    const faceCount = indices ? indices.length / 3 : positions.length / 9;
-
-    // Process each face of the base octahedron
-    for (let i = 0; i < faceCount; i++) {
-      let v1: THREE.Vector3, v2: THREE.Vector3, v3: THREE.Vector3;
-
-      if (indices) {
-        // Use indices to get vertices
-        const [i1, i2, i3] = [indices[i * 3], indices[i * 3 + 1], indices[i * 3 + 2]];
-        v1 = new THREE.Vector3().fromArray(positions, i1 * 3);
-        v2 = new THREE.Vector3().fromArray(positions, i2 * 3);
-        v3 = new THREE.Vector3().fromArray(positions, i3 * 3);
-      } else {
-        // Use direct position data
-        const startIndex = i * 9;
-        v1 = new THREE.Vector3().fromArray(positions, startIndex);
-        v2 = new THREE.Vector3().fromArray(positions, startIndex + 3);
-        v3 = new THREE.Vector3().fromArray(positions, startIndex + 6);
-      }
-
-      // Use maximum detail level from regionDetails for initial geometry creation
-      const maxDetail = Math.max(...regionDetails);
-      const subdivided = subdivideTriangle(v1, v2, v3, maxDetail);
-
-      subdivided.forEach((triangle) => {
+    let regionStart = 0;
+    faces.forEach((face, regionIdx) => {
+      let v1 = baseVerts[face[0]];
+      let v2 = baseVerts[face[1]];
+      let v3 = baseVerts[face[2]];
+      const detail = regionDetails[regionIdx] || 0;
+      const subdivided = subdivideTriangle(v1, v2, v3, detail);
+      subdivided.forEach((triangle, localIdx) => {
         const geometry = new THREE.BufferGeometry();
         const positions = triangle.flatMap(v => [v.x, v.y, v.z]);
         geometry.setAttribute(
@@ -134,21 +102,28 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
           new THREE.BufferAttribute(new Float32Array(positions), 3),
         );
         geometry.computeVertexNormals();
-
-        allTriangles.push({ geometry, index: triangleIndex++ });
+        allTriangles.push({ geometry, index: triangleIndex++, region: regionIdx, localIndex: localIdx });
       });
-    }
-
-    console.log(`[${new Date().toLocaleTimeString()}] Created ${allTriangles.length} total triangles`);
+      regionStart += subdivided.length;
+    });
     return allTriangles;
   };
 
   // Memoize triangles to avoid unnecessary recalculation
   const triangles = useMemo(() => {
-    const tris = createOctahedronTriangles();
-    console.log(`[${new Date().toLocaleTimeString()}] triangles useMemo: count=`, tris.length);
+    const tris = createOctahedronTrianglesByRegion();
     return tris;
   }, [regionDetails]);
+
+  // Group triangles by region for passing to OctahedronRegion
+  const trianglesByRegion = useMemo(() => {
+    const byRegion: { [region: number]: { geometry: THREE.BufferGeometry; index: number; localIndex: number }[] } = {};
+    triangles.forEach(tri => {
+      if (!byRegion[tri.region]) byRegion[tri.region] = [];
+      byRegion[tri.region].push({ geometry: tri.geometry, index: tri.index, localIndex: tri.localIndex });
+    });
+    return byRegion;
+  }, [triangles]);
 
   // Calculate triangle adjacency for keyboard navigation (optimized)
   const triangleAdjacency = useMemo(() => {
@@ -490,8 +465,8 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
           baseVertices={[baseVerts[face[0]], baseVerts[face[1]], baseVerts[face[2]]]}
           detail={regionDetails[i] || 0}
           regionIndex={i}
+          triangles={trianglesByRegion[i]}
           onTriangleClick={(idx) => {
-            console.log(`[${new Date().toLocaleTimeString()}] OctahedronRegion onTriangleClick: regionIndex=`, i, 'triangleIndex=', idx);
             handleTriangleClick(idx);
           }}
           selectedTriangles={clickedTriangles}
