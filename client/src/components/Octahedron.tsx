@@ -7,6 +7,8 @@ import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 
 export default function Octahedron() {
+  // Detail level for subdivision of octahedron faces: 0 = no subdivision, 1 = 4 triangles per face, etc.
+  const detail = 5;
   const groupRef = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
   const [clickedTriangles, setClickedTriangles] = useState<Set<number>>(
@@ -18,8 +20,6 @@ export default function Octahedron() {
   const meshRefs = useRef<(Mesh | null)[]>([]);
   const lineRef = useRef<Line2 | null>(null);
 
-  // Detail level for subdivision of octahedron faces: 0 = no subdivision, 1 = 4 triangles per face, etc.
-  const detail = 4;
 
   // Subdivide a triangle into 4 smaller triangles
   const subdivideTriangle = (
@@ -60,13 +60,13 @@ export default function Octahedron() {
 
   // Create individual triangle geometries for each face
   const createOctahedronTriangles = () => {
-    console.log("Creating octahedron triangles...");
+    console.log(`[${new Date().toLocaleTimeString()}] Creating octahedron triangles...`);
 
     const baseOctahedron = new THREE.OctahedronGeometry(2, 0);
     const positions = baseOctahedron.attributes.position.array as Float32Array;
     const indices = baseOctahedron.index?.array as Uint16Array;
 
-    console.log("Base octahedron created:", {
+    console.log(`[${new Date().toLocaleTimeString()}] Base octahedron created:`, {
       positionsLength: positions.length,
       indicesLength: indices?.length,
       hasIndices: !!indices,
@@ -80,12 +80,12 @@ export default function Octahedron() {
     let faceCount: number;
     if (indices) {
       console.log(
-        `Processing ${indices.length / 3} faces with detail level ${detail} (indexed)`,
+        `[${new Date().toLocaleTimeString()}] Processing ${indices.length / 3} faces with detail level ${detail} (indexed)`,
       );
       faceCount = indices.length / 3;
     } else {
       console.log(
-        `Processing ${positions.length / 9} faces with detail level ${detail} (non-indexed)`,
+        `[${new Date().toLocaleTimeString()}] Processing ${positions.length / 9} faces with detail level ${detail} (non-indexed)`,
       );
       faceCount = positions.length / 9;
     }
@@ -135,13 +135,8 @@ export default function Octahedron() {
         );
       }
 
-      console.log(`Face ${i / 3}: vertices`, v1, v2, v3);
-
       // Subdivide this triangle
       const subdivided = subdivideTriangle(v1, v2, v3, detail);
-      console.log(
-        `Face ${i / 3} subdivided into ${subdivided.length} triangles`,
-      );
 
       subdivided.forEach((triangle) => {
         const geometry = new THREE.BufferGeometry();
@@ -167,82 +162,104 @@ export default function Octahedron() {
       });
     }
 
-    console.log(`Created ${allTriangles.length} total triangles`);
+    console.log(`[${new Date().toLocaleTimeString()}] Created ${allTriangles.length} total triangles`);
     return allTriangles;
   };
 
-  // Calculate triangle adjacency for keyboard navigation
+  // Memoize triangles to avoid unnecessary recalculation
+  const triangles = useMemo(() => createOctahedronTriangles(), [detail]);
+
+  // Calculate triangle adjacency for keyboard navigation (optimized)
   const triangleAdjacency = useMemo(() => {
-    const adjacency = new Map<number, number[]>();
-    const triangles = createOctahedronTriangles();
+    // Helper to create a unique key for an edge (sorted vertex positions)
+    function edgeKey(a: number[], b: number[]) {
+      // Sort the two vertices lexicographically
+      const v1 = a.join(",");
+      const v2 = b.join(",");
+      return v1 < v2 ? `${v1}|${v2}` : `${v2}|${v1}`;
+    }
 
-    console.log(
-      `Created ${triangles.length} triangles for adjacency calculation`,
-    );
-
-    // Helper function to check if two triangles share an edge (2 vertices)
-    const shareEdge = (
-      tri1: THREE.BufferGeometry,
-      tri2: THREE.BufferGeometry,
-    ): boolean => {
-      const pos1 = tri1.attributes.position.array as Float32Array;
-      const pos2 = tri2.attributes.position.array as Float32Array;
-
-      const vertices1 = [];
-      const vertices2 = [];
-
-      // Extract vertices from both triangles
-      for (let i = 0; i < 9; i += 3) {
-        vertices1.push([pos1[i], pos1[i + 1], pos1[i + 2]]);
-        vertices2.push([pos2[i], pos2[i + 1], pos2[i + 2]]);
-      }
-
-      // Count shared vertices (vertices that are very close to each other)
-      let sharedVertices = 0;
-      const tolerance = 0.001;
-
-      for (const v1 of vertices1) {
-        for (const v2 of vertices2) {
-          const dx = Math.abs(v1[0] - v2[0]);
-          const dy = Math.abs(v1[1] - v2[1]);
-          const dz = Math.abs(v1[2] - v2[2]);
-
-          if (dx < tolerance && dy < tolerance && dz < tolerance) {
-            sharedVertices++;
-            break; // Found a match, move to next vertex in vertices1
-          }
-        }
-      }
-
-      // Triangles share an edge if they have exactly 2 vertices in common
-      return sharedVertices === 2;
-    };
-
-    // Calculate adjacency for each triangle
-    triangles.forEach((triangle, index) => {
-      const neighbors: number[] = [];
-
-      // Check against all other triangles
-      triangles.forEach((otherTriangle, otherIndex) => {
-        if (
-          index !== otherIndex &&
-          shareEdge(triangle.geometry, otherTriangle.geometry)
-        ) {
-          neighbors.push(otherIndex);
-        }
-      });
-
-      adjacency.set(index, neighbors);
-      if (neighbors.length > 0) {
-        console.log(
-          `Triangle ${index} has ${neighbors.length} edge-sharing neighbors: [${neighbors.slice(0, 5).join(", ")}${neighbors.length > 5 ? "..." : ""}]`,
-        );
+    // Build a map from edge key to triangle indices
+    const edgeMap = new Map<string, number[]>();
+    triangles.forEach(({ geometry }, triIdx) => {
+      const pos = geometry.attributes.position.array as Float32Array;
+      const verts = [
+        [pos[0], pos[1], pos[2]],
+        [pos[3], pos[4], pos[5]],
+        [pos[6], pos[7], pos[8]],
+      ];
+      // Each triangle has 3 edges
+      for (let i = 0; i < 3; i++) {
+        const a = verts[i];
+        const b = verts[(i + 1) % 3];
+        const key = edgeKey(a, b);
+        if (!edgeMap.has(key)) edgeMap.set(key, []);
+        edgeMap.get(key)!.push(triIdx);
       }
     });
 
-    console.log(`Adjacency map created with ${adjacency.size} entries`);
+    // Now, for each triangle, find neighbors (other triangles sharing an edge)
+    const adjacency = new Map<number, number[]>();
+    triangles.forEach(({ geometry }, triIdx) => {
+      const pos = geometry.attributes.position.array as Float32Array;
+      const verts = [
+        [pos[0], pos[1], pos[2]],
+        [pos[3], pos[4], pos[5]],
+        [pos[6], pos[7], pos[8]],
+      ];
+      const neighbors = new Set<number>();
+      for (let i = 0; i < 3; i++) {
+        const a = verts[i];
+        const b = verts[(i + 1) % 3];
+        const key = edgeKey(a, b);
+        const tris = edgeMap.get(key)!;
+        tris.forEach(idx => {
+          if (idx !== triIdx) neighbors.add(idx);
+        });
+      }
+      adjacency.set(triIdx, Array.from(neighbors));
+    });
+    console.log(`[${new Date().toLocaleTimeString()}] Adjacency map created with ${adjacency.size} entries`);
     return adjacency;
-  }, [detail]);
+  }, [triangles]);
+
+  // Helper function to check if two triangles share an edge (2 vertices)
+  function shareEdge(
+    tri1: THREE.BufferGeometry,
+    tri2: THREE.BufferGeometry,
+  ): boolean {
+    const pos1 = tri1.attributes.position.array as Float32Array;
+    const pos2 = tri2.attributes.position.array as Float32Array;
+
+    const vertices1 = [];
+    const vertices2 = [];
+
+    // Extract vertices from both triangles
+    for (let i = 0; i < 9; i += 3) {
+      vertices1.push([pos1[i], pos1[i + 1], pos1[i + 2]]);
+      vertices2.push([pos2[i], pos2[i + 1], pos2[i + 2]]);
+    }
+
+    // Count shared vertices (vertices that are very close to each other)
+    let sharedVertices = 0;
+    const tolerance = 0.001;
+
+    for (const v1 of vertices1) {
+      for (const v2 of vertices2) {
+        const dx = Math.abs(v1[0] - v2[0]);
+        const dy = Math.abs(v1[1] - v2[1]);
+        const dz = Math.abs(v1[2] - v2[2]);
+
+        if (dx < tolerance && dy < tolerance && dz < tolerance) {
+          sharedVertices++;
+          break; // Found a match, move to next vertex in vertices1
+        }
+      }
+    }
+
+    // Triangles share an edge if they have exactly 2 vertices in common
+    return sharedVertices === 2;
+  }
 
   // Keyboard navigation and G key mode
   useEffect(() => {
@@ -253,7 +270,7 @@ export default function Octahedron() {
         if (selectedTriangles.length === 1) {
           setSelectionMode(!selectionMode);
           setHoveredTriangle(null); // Clear any hover when toggling
-          console.log(`Selection mode ${!selectionMode ? 'enabled' : 'disabled'}`);
+          console.log(`Selection mode ${!selectionMode ? 'enabled' : 'disabled'} [${new Date().toLocaleTimeString()}]`);
           event.preventDefault();
           return;
         }
@@ -321,7 +338,7 @@ export default function Octahedron() {
       if (nextTriangle !== null) {
         event.preventDefault();
         console.log(
-          `Keyboard navigation: moving from triangle ${currentTriangle} to ${nextTriangle}`,
+          `[${new Date().toLocaleTimeString()}] Keyboard navigation: moving from triangle ${currentTriangle} to ${nextTriangle}`,
         );
         setClickedTriangles(new Set([nextTriangle]));
       }
@@ -335,12 +352,10 @@ export default function Octahedron() {
   const handleClick = (event: THREE.Event) => {
     // Disable selection mode when clicking anywhere
     if (selectionMode) {
-      console.log('Disabling selection mode due to click');
+      console.log('Disabling selection mode due to click [' + new Date().toLocaleTimeString() + ']');
       setSelectionMode(false);
     }
   };
-
-  const triangles = useMemo(() => createOctahedronTriangles(), [detail]);
 
   // Calculate triangle centers for pathfinding
   const triangleCenters = useMemo(() => {
@@ -403,7 +418,7 @@ export default function Octahedron() {
     }
 
     const path = findPath(startTriangle, hoveredTriangle);
-    console.log(`Path calculated from ${startTriangle} to ${hoveredTriangle}:`, path);
+//     console.log(`Path calculated from ${startTriangle} to ${hoveredTriangle}:`, path);
     return path;
   }, [selectionMode, hoveredTriangle, clickedTriangles, triangleAdjacency]);
 
@@ -446,7 +461,9 @@ export default function Octahedron() {
         const path = findPath(selectedTriangle, hoveredTriangle);
 
         if (path.length > 1) {
-          console.log("Rendering path:", path);
+          console.log(
+            `[${new Date().toLocaleTimeString()}] Rendering path:`, path
+          );
           const pathPoints = path.map(triangleIndex => {
             const center = triangleCenters.get(triangleIndex);
             return center ? center.clone().normalize().multiplyScalar(2.05) : new THREE.Vector3(0, 0, 0);
@@ -478,6 +495,7 @@ export default function Octahedron() {
         return null;
       })()}
 
+      {/* Render individual triangle meshes */}
       {triangles.map(({ geometry, index }) => (
         <mesh
           key={index}
@@ -489,15 +507,15 @@ export default function Octahedron() {
           onClick={(e) => {
             e.stopPropagation();
             console.log(
-              `Direct click on triangle ${index}, point:`,
+              `[${new Date().toLocaleTimeString()}] Direct click on triangle ${index}, point:`,
               e.point,
-              "distance:",
+              'distance:',
               e.distance,
             );
 
             // Disable selection mode when clicking on a triangle
             if (selectionMode) {
-              console.log(`Disabling selection mode due to click on triangle ${index}`);
+              console.log(`Disabling selection mode due to click on triangle ${index} [${new Date().toLocaleTimeString()}]`);
               setSelectionMode(false);
             }
 
@@ -505,11 +523,11 @@ export default function Octahedron() {
               // Only one triangle can be selected at a time
               if (prev.has(index)) {
                 // If clicking the currently selected triangle, deselect it
-                console.log(`Deselecting triangle ${index}`);
+                console.log(`Deselecting triangle ${index} [${new Date().toLocaleTimeString()}]`);
                 return new Set();
               } else {
                 // Select the new triangle (replacing any previous selection)
-                console.log(`Selecting triangle ${index}`);
+                console.log(`Selecting triangle ${index} [${new Date().toLocaleTimeString()}]`);
                 return new Set([index]);
               }
             });
@@ -530,18 +548,14 @@ export default function Octahedron() {
           <meshStandardMaterial
             color={
               clickedTriangles.has(index)
-                ? "#ff6b6b" // Selected triangle stays red
+                ? "#ff6b6b"
                 : selectionMode && hoveredTriangle === index
-                  ? "#ffff00" // Yellow hover in selection mode
-//                   : hovered
-//                     ? "#4ecdc4"
-                    : "#45b7d1"
+                ? "#ffff00"
+                : "#45b7d1"
             }
             wireframe={false}
             metalness={0.3}
             roughness={0.4}
-//             emissive={hovered ? "#001122" : "#000000"}
-//             emissiveIntensity={hovered ? 0.1 : 0}
             side={THREE.DoubleSide}
           />
         </mesh>

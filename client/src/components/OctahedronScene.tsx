@@ -60,8 +60,9 @@ export default function OctahedronScene() {
         minDistance={2}
         maxDistance={20}
         autoRotate={false}
-        autoRotateSpeed={0.5}
         target={[0, 0, 0]}
+        enableDamping={true}
+        dampingFactor={0.25} // Higher value for less smoothing
       />
     </>
   );
