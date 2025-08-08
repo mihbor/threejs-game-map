@@ -38,6 +38,7 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
 
   // Handler for triangle click
   function handleTriangleClick(triangleIndex: number) {
+    console.log(`[${new Date().toLocaleTimeString()}] handleTriangleClick: triangleIndex=`, triangleIndex);
     setClickedTriangles((prev) => {
       if (prev.has(triangleIndex)) return new Set();
       return new Set([triangleIndex]);
@@ -143,10 +144,15 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
   };
 
   // Memoize triangles to avoid unnecessary recalculation
-  const triangles = useMemo(() => createOctahedronTriangles(), [regionDetails]);
+  const triangles = useMemo(() => {
+    const tris = createOctahedronTriangles();
+    console.log(`[${new Date().toLocaleTimeString()}] triangles useMemo: count=`, tris.length);
+    return tris;
+  }, [regionDetails]);
 
   // Calculate triangle adjacency for keyboard navigation (optimized)
   const triangleAdjacency = useMemo(() => {
+    console.log(`[${new Date().toLocaleTimeString()}] triangleAdjacency useMemo: triangles.length=`, triangles.length);
     // Helper to create a unique key for an edge (sorted vertex positions)
     function edgeKey(a: number[], b: number[]) {
       // Sort the two vertices lexicographically
@@ -175,7 +181,7 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
     });
 
     // Now, for each triangle, find neighbors (other triangles sharing an edge)
-    const adjacency = new Map<number, number[]>();
+    const adjacency = new Map<number, number>();
     triangles.forEach(({ geometry }, triIdx) => {
       const pos = geometry.attributes.position.array as Float32Array;
       const verts = [
@@ -433,10 +439,16 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
     const path = findPath(selectedTriangle, hoveredTriangle);
 
     if (path.length > 1) {
+      // Debug: Log the path and corresponding centers
+      console.log(`[${new Date().toLocaleTimeString()}] Path indices:`, path);
       const pathPoints = path.map(triangleIndex => {
         const center = triangleCenters.get(triangleIndex);
+        if (!center) {
+          console.warn(`[${new Date().toLocaleTimeString()}] No center for triangleIndex`, triangleIndex);
+        }
         return center ? center.clone().normalize().multiplyScalar(2.05) : new THREE.Vector3(0, 0, 0);
       });
+      console.log(`[${new Date().toLocaleTimeString()}] Path points:`, pathPoints);
 
       const positions: number[] = [];
       pathPoints.forEach(point => {
@@ -478,7 +490,10 @@ export default function Octahedron({ regionDetails = [5,5,5,5,5,5,5,5] }: { regi
           baseVertices={[baseVerts[face[0]], baseVerts[face[1]], baseVerts[face[2]]]}
           detail={regionDetails[i] || 0}
           regionIndex={i}
-          onTriangleClick={handleTriangleClick}
+          onTriangleClick={(idx) => {
+            console.log(`[${new Date().toLocaleTimeString()}] OctahedronRegion onTriangleClick: regionIndex=`, i, 'triangleIndex=', idx);
+            handleTriangleClick(idx);
+          }}
           selectedTriangles={clickedTriangles}
           selectionMode={selectionMode}
           hoveredTriangle={hoveredTriangle}

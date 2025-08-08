@@ -97,9 +97,18 @@ export default function OctahedronRegion({
             geometry={geometry}
             castShadow
             receiveShadow
-            onClick={() => onTriangleClick(triangleIndex)}
-            onPointerOver={() => selectionMode && setHoveredTriangle(triangleIndex)}
-            onPointerOut={() => selectionMode && setHoveredTriangle(null)}
+            onClick={(e) => {
+              e.stopPropagation();
+              onTriangleClick(triangleIndex);
+            }}
+            onPointerOver={(e) => {
+              e.stopPropagation();
+              selectionMode && setHoveredTriangle(triangleIndex)
+            }}
+            onPointerOut={(e) => {
+              e.stopPropagation();
+              selectionMode && setHoveredTriangle(null)
+            }}
           >
             <meshStandardMaterial
               color={
